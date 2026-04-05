@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from
 import { supabase } from './lib/supabase';
 import { useAuthStore } from './stores/authStore';
 import { useToastStore } from './stores/toastStore';
+import { useThemeStore } from './stores/themeStore';
 import ToastContainer from './Components/ToastContainer';
 import LoginPage from './Pages/LoginPage';
 import DashboardPage from './Pages/DashboardPage';
@@ -61,6 +62,7 @@ function AppContent() {
 
 function App() {
   const { setUser, setInitialized } = useAuthStore();
+  const { theme } = useThemeStore();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -85,7 +87,9 @@ function App() {
 
   return (
     <BrowserRouter>
-      <AppContent />
+      <div className={theme}>
+        <AppContent />
+      </div>
     </BrowserRouter>
   );
 }

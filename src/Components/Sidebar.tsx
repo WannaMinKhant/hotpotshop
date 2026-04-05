@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { useI18nStore } from '../stores/i18nStore';
+import { useThemeStore } from '../stores/themeStore';
 
 type ModuleName = 'dashboard' | 'cashier' | 'kitchen' | 'orders' | 'stock' | 'customers' | 'staff' | 'reports';
 
@@ -10,19 +12,21 @@ interface SidebarProps {
 }
 
 const menuItems: { id: ModuleName; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-  { id: 'cashier', label: 'Cashier/POS', icon: '💰' },
-  { id: 'kitchen', label: 'Kitchen', icon: '🍲' },
-  { id: 'orders', label: 'Orders', icon: '📋' },
-  { id: 'stock', label: 'Stock Control', icon: '📦' },
-  { id: 'customers', label: 'Customers', icon: '👥' },
-  { id: 'staff', label: 'Staff', icon: '🧑‍💼' },
-  { id: 'reports', label: 'Reports', icon: '📈' },
+  { id: 'dashboard', label: 'sidebar.dashboard', icon: '📊' },
+  { id: 'cashier', label: 'sidebar.cashier', icon: '💰' },
+  { id: 'kitchen', label: 'sidebar.kitchen', icon: '🍲' },
+  { id: 'orders', label: 'sidebar.orders', icon: '📋' },
+  { id: 'stock', label: 'sidebar.stock', icon: '📦' },
+  { id: 'customers', label: 'sidebar.customers', icon: '👥' },
+  { id: 'staff', label: 'sidebar.staff', icon: '🧑‍💼' },
+  { id: 'reports', label: 'sidebar.reports', icon: '📈' },
 ];
 
 const Sidebar = ({ activeModule, onModuleChange, onLogout }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const { user } = useAuthStore();
+  const { lang, setLang, t } = useI18nStore();
+  const { toggleTheme, theme } = useThemeStore();
   const userEmail = user?.email || 'Admin User';
   const userInitial = userEmail.charAt(0).toUpperCase();
 
@@ -49,23 +53,27 @@ const Sidebar = ({ activeModule, onModuleChange, onLogout }: SidebarProps) => {
 
       {/* Menu Items */}
       <nav className="flex-1 overflow-y-auto py-2">
-        <ul className="space-y-1 px-2">
-          {menuItems.map((item) => (
-            <li key={item.id}>
-              <button
-                onClick={() => onModuleChange(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 ${
-                  activeModule === item.id
-                    ? 'bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/20'
-                    : 'text-gray-300 hover:bg-[#272a30] hover:text-white'
-                }`}
-              >
-                <span className="text-xl shrink-0">{item.icon}</span>
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
+        {menuItems.length === 0 ? (
+          <div className="p-4 text-gray-500 text-sm text-center">No access</div>
+        ) : (
+          <ul className="space-y-1 px-2">
+            {menuItems.map((item) => (
+              <li key={item.id}>
+                <button
+                  onClick={() => onModuleChange(item.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 ${
+                    activeModule === item.id
+                      ? 'bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/20'
+                      : 'text-gray-300 hover:bg-[#272a30] hover:text-white'
+                  }`}
+                >
+                  <span className="text-xl shrink-0">{item.icon}</span>
+                  {!collapsed && <span className="truncate">{t(item.label)}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </nav>
 
       {/* Footer */}
@@ -80,10 +88,27 @@ const Sidebar = ({ activeModule, onModuleChange, onLogout }: SidebarProps) => {
               <p className="text-xs text-green-400">● Online</p>
             </div>
           </div>
+
+          {/* Theme & Language Toggles */}
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={toggleTheme}
+              className="flex-1 bg-[#272a30] hover:bg-[#2f333a] text-gray-300 py-1.5 rounded-lg text-xs font-semibold transition"
+            >
+              {theme === 'dark' ? '🌙 Dark' : '☀️ Light'}
+            </button>
+            <button
+              onClick={() => setLang(lang === 'en' ? 'mm' : 'en')}
+              className="flex-1 bg-[#272a30] hover:bg-[#2f333a] text-gray-300 py-1.5 rounded-lg text-xs font-semibold transition"
+            >
+              {lang === 'en' ? '🇬🇧 EN' : '🇲🇲 MM'}
+            </button>
+          </div>
+
           {onLogout && (
             <button
               onClick={onLogout}
-              className="mt-3 w-full bg-red-500/20 hover:bg-red-500/30 text-red-400 py-2 rounded-lg text-sm font-semibold transition"
+              className="mt-2 w-full bg-red-500/20 hover:bg-red-500/30 text-red-400 py-2 rounded-lg text-sm font-semibold transition"
             >
               🚪 Sign Out
             </button>

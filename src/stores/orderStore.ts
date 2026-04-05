@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import type { Order, OrderItem } from '../types';
 import { supabase } from '../lib/supabase';
+import { useRecipeStore } from './recipeStore';
 
 interface OrderState {
   orders: (Order & { items?: OrderItem[] })[];
@@ -35,7 +36,16 @@ export const useOrderStore = create<OrderState>((set) => ({
         .select('*, order_items(*)')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      set({ orders: data || [] });
+
+      // Normalize: Supabase returns joined data under 'order_items', map it to 'items'
+      const normalized = (data || []).map((order: Record<string, unknown>) => {
+        const { order_items, ...rest } = order;
+        return {
+          ...rest,
+          items: (order_items as unknown) || [],
+        } as Order & { items?: OrderItem[] };
+      });
+      set({ orders: normalized });
     } catch (e: unknown) {
       set({ error: e instanceof Error ? e.message : 'Failed to fetch orders' });
     } finally {
@@ -73,18 +83,27 @@ export const useOrderStore = create<OrderState>((set) => ({
         }));
         await supabase.from('stock_movements').insert(movementRecords);
 
-        // Decrement product stock
+        // Deduct stock for each item
         for (const item of items) {
-          const { data: product } = await supabase
-            .from('products')
-            .select('stock_quantity')
-            .eq('id', item.product_id)
-            .single();
-          if (product) {
-            await supabase
+          // Check if product_id refers to a recipe (product_id > 100000 = recipe ID convention)
+          const isRecipe = item.product_id > 100000;
+
+          if (isRecipe) {
+            const recipeId = item.product_id - 100000;
+            await useRecipeStore.getState().deductIngredients(recipeId, item.quantity);
+          } else {
+            // Regular product — deduct stock directly
+            const { data: product } = await supabase
               .from('products')
-              .update({ stock_quantity: Math.max(0, product.stock_quantity - item.quantity) })
-              .eq('id', item.product_id);
+              .select('stock_quantity')
+              .eq('id', item.product_id)
+              .single();
+            if (product) {
+              await supabase
+                .from('products')
+                .update({ stock_quantity: Math.max(0, product.stock_quantity - item.quantity) })
+                .eq('id', item.product_id);
+            }
           }
         }
       }

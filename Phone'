@@ -1,0 +1,18 @@
+At line:1 char:2925
++ ... 0 text-xs",'${isDark ? ''text-gray-400'' : ''text-gray-500''} text-xs ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Unexpected token '${isDark ? ''text-gray-400'' : ''text-gray-500''}' in 
+expression or statement.
+At line:1 char:2975
++ ... text-gray-500''} text-xs>Name'; $c=$c -replace 'text-gray-400 text-xs ...
++                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Unexpected token 'text-xs>Name'; $c=$c -replace 'text-gray-400' in expression 
+or statement.
+At line:1 char:3027
++ ... -400 text-xs",'${isDark ? ''text-gray-400'' : ''text-gray-500''} text ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The string is missing the terminator: ".
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordEx 
+   ception
+    + FullyQualifiedErrorId : UnexpectedToken
+ 

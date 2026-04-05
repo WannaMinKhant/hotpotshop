@@ -81,7 +81,31 @@ export interface Customer {
   created_at?: string;
 }
 
-export type TableName = 'staff' | 'products' | 'orders' | 'order_items' | 'customers' | 'stock_movements';
+export interface Recipe {
+  id?: number;
+  name: string;
+  category: string;
+  description?: string;
+  price: number;
+  cost_price?: number;
+  emoji?: string;
+  is_active: boolean;
+  ingredients?: RecipeIngredient[];
+  created_at?: string;
+}
+
+export interface RecipeIngredient {
+  id?: number;
+  recipe_id?: number;
+  product_id: number;
+  product_name?: string;
+  product_emoji?: string;
+  quantity: number;
+  unit: string;
+  notes?: string;
+}
+
+export type TableName = 'staff' | 'products' | 'orders' | 'order_items' | 'customers' | 'stock_movements' | 'recipes' | 'recipe_ingredients';
 
 // Enum type aliases for component imports
 export type OrderStatusEnum = Order['status'];

@@ -4,7 +4,13 @@
       "Bash(del *)",
       "Bash(npm run *)",
       "Bash(node *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(npm *)",
+      "Bash(powershell *)",
+      "Bash(ren *)",
+      "Bash(git checkout *)",
+      "Bash(npx *)",
+      "Bash(findstr *)"
     ]
   },
   "$version": 3

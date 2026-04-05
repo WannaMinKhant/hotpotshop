@@ -4,9 +4,12 @@ import CashierPage from '../Components/CashierPage';
 import KitchenPage from '../Components/KitchenPage';
 import OrdersPage from '../Components/OrdersPage';
 import StockControlPage from '../Components/StockControlPage';
+import RecipesPage from '../Components/RecipesPage';
 import CustomersPage from '../Components/CustomersPage';
 import StaffPage from '../Components/StaffPage';
 import ReportsPage from '../Components/ReportsPage';
+import UsersPage from '../Components/UsersPage';
+import AdminPage from '../Components/AdminPage';
 
 const renderModule = (activeModule: string) => {
   switch (activeModule) {
@@ -20,12 +23,18 @@ const renderModule = (activeModule: string) => {
       return <OrdersPage />;
     case 'stock':
       return <StockControlPage />;
+    case 'recipes':
+      return <RecipesPage />;
     case 'customers':
       return <CustomersPage />;
     case 'staff':
       return <StaffPage />;
     case 'reports':
       return <ReportsPage />;
+    case 'users':
+      return <UsersPage />;
+    case 'admin':
+      return <AdminPage />;
     default:
       return <DashboardHome />;
   }

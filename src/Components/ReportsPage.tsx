@@ -2,11 +2,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { useOrderStore } from '../stores/orderStore';
 import { useProductStore } from '../stores/productsStore';
 import { useCustomerStore } from '../stores/customerStore';
+import { useI18nStore } from '../stores/i18nStore';
 
 const ReportsPage = () => {
   const { orders, fetchOrders } = useOrderStore();
   const { products, fetchProducts } = useProductStore();
   const { customers, fetchCustomers } = useCustomerStore();
+  const { t } = useI18nStore();
   const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week');
 
   useEffect(() => {
@@ -90,15 +92,15 @@ const ReportsPage = () => {
   const lowStockValue = products.filter(p => p.stock_quantity <= p.reorder_point).length;
   const inventoryValue = products.reduce((s, p) => s + (p.stock_quantity * (p.cost_price || p.price)), 0);
 
-  const periodLabels = { today: 'Today', week: 'This Week', month: 'This Month' };
+  const periodLabels = { today: t('reports.today'), week: t('reports.thisWeek'), month: t('reports.thisMonth') };
   const periodKeys: ('today' | 'week' | 'month')[] = ['today', 'week', 'month'];
 
   return (
     <div className="p-6 bg-[#1e2128] h-screen overflow-y-auto">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-white">📊 Reports & Analytics</h1>
-          <p className="text-gray-400 mt-1">{periodLabels[period]} Performance</p>
+          <h1 className="text-3xl font-bold text-white">{t('reports.title')}</h1>
+          <p className="text-gray-400 mt-1">{periodLabels[period]}</p>
         </div>
         <div className="flex bg-[#272a30] rounded-lg p-1">
           {periodKeys.map(p => (
@@ -112,19 +114,19 @@ const ReportsPage = () => {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="bg-green-500/20 border border-green-500 rounded-xl p-4">
-          <p className="text-green-400 text-sm font-semibold">Revenue</p>
+          <p className="text-green-400 text-sm font-semibold">{t('reports.revenue')}</p>
           <p className="text-3xl font-bold text-green-400">${totalRevenue.toFixed(2)}</p>
         </div>
         <div className="bg-blue-500/20 border border-blue-500 rounded-xl p-4">
-          <p className="text-blue-400 text-sm font-semibold">Orders</p>
+          <p className="text-blue-400 text-sm font-semibold">{t('reports.orders')}</p>
           <p className="text-3xl font-bold text-blue-400">{filteredOrders.length}</p>
         </div>
         <div className="bg-yellow-500/20 border border-yellow-500 rounded-xl p-4">
-          <p className="text-yellow-400 text-sm font-semibold">Avg Order</p>
+          <p className="text-yellow-400 text-sm font-semibold">{t('reports.avgOrder')}</p>
           <p className="text-3xl font-bold text-yellow-400">${avgOrderValue.toFixed(2)}</p>
         </div>
         <div className="bg-purple-500/20 border border-purple-500 rounded-xl p-4">
-          <p className="text-purple-400 text-sm font-semibold">Customers</p>
+          <p className="text-purple-400 text-sm font-semibold">{t('reports.customers')}</p>
           <p className="text-3xl font-bold text-purple-400">{customers.length}</p>
         </div>
       </div>

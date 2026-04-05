@@ -1,16 +1,33 @@
 @import 'tailwindcss';
 
 @keyframes slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
-.animate-slide-in {
-  animation: slide-in 0.3s ease-out;
+.animate-slide-in { animation: slide-in 0.3s ease-out; }
+
+/* Light mode overrides - applied when .light class is on root */
+.light {
+  background-color: #f3f4f6 !important;
+  color: #111827 !important;
 }
+
+.light .bg-\[\#1e2128\] { background-color: #f3f4f6 !important; }
+.light .bg-\[\#1a1d23\] { background-color: #ffffff !important; }
+.light .bg-\[\#272a30\] { background-color: #ffffff !important; }
+.light .bg-\[\#1f2329\] { background-color: #f9fafb !important; }
+.light .bg-\[\#2f333a\] { background-color: #f3f4f6 !important; }
+
+.light .text-white { color: #111827 !important; }
+.light .text-gray-400 { color: #6b7280 !important; }
+.light .text-gray-500 { color: #9ca3af !important; }
+.light .text-gray-300 { color: #4b5563 !important; }
+
+.light .border-gray-700 { border-color: #e5e7eb !important; }
+.light .border-gray-600 { border-color: #d1d5db !important; }
+.light .border-gray-800 { border-color: #e5e7eb !important; }
+
+.light .hover\:bg-\[\#272a30\]:hover { background-color: #f3f4f6 !important; }
+.light .hover\:bg-\[\#2f333a\]:hover { background-color: #f3f4f6 !important; }
+.light .hover\:bg-\[\#32363d\]:hover { background-color: #f3f4f6 !important; }

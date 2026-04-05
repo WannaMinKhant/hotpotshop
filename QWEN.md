@@ -167,9 +167,15 @@ Supabase Auth (email/password) is configured. Users can sign up or sign in via t
 | `customerStore` | Customer CRUD (Supabase) |
 | `staffStore` | Staff CRUD (Supabase) |
 | `stockMovementStore` | Stock movement tracking (purchase/sale/adjustment/waste/return); auto-updates product stock |
+| `recipeStore` | Recipe CRUD with ingredient management; deducts stock on order |
+| `categoryStore` | Product category CRUD with parent/subcategory support |
+| `tableStore` | Restaurant table CRUD with seat count |
+| `userManagementStore` | User account CRUD (email/password auth) |
 | `uiStore` | Sidebar toggle, current path, modal state |
 | `authStore` | Supabase auth session, user, sign out |
 | `toastStore` | Toast notifications (success/error/warning/info, auto-dismiss) |
+| `notificationStore` | Realtime badge counts for Kitchen and Orders |
+| `i18nStore` | English/Burmese localization with 80+ translation keys |
 
 ## Utilities
 
@@ -229,15 +235,35 @@ Built-in emoji keyboard organized by restaurant categories (Hotpot Bases, Meats,
 - **Form Validation** — All modals validate required fields and email format with inline error messages
 
 ### Phase 5 — Order Consistency, Stock Management, Unit Conversion ✅
-- **Order numbers** — Server-generated `ORD-YYYYMMDD-XXX` format; consistent across all pages (Cashier, Dashboard, Kitchen, Orders, Reports)
+- **Order numbers** — Server-generated `ORD-YYYYMMDD-XXX` format; consistent across all pages
 - **Auto stock decrement** — Creating an order automatically creates `sale` stock movements and decrements product stock
 - **Stock movements table** — New `stock_movements` table tracks purchase/sale/adjustment/waste/return with cost tracking
 - **Purchase modal** — Enter quantity, cost per unit, notes; live unit conversion preview; auto-updates product stock
 - **Stock history panel** — Per-product movement log with type badges, quantities, costs, and notes
 - **Quick stock actions** — One-click purchase/sale/adjustment/waste/return buttons on stock history panel
-- **Unit conversion** — `lib/unit-conversion.ts` with weight/volume/length/count groups; compatible unit detection; conversion during purchase entry
-- **Emoji picker** — `EmojiPicker.tsx` component with categorized emojis (restaurant-themed); clickable during product add/edit; shows current emoji highlight
-- **Extended product model** — Added `base_unit`, `conversion_factor`, `cost_price` fields; `stock_quantity` now supports decimals
+- **Unit conversion** — `lib/unit-conversion.ts` with weight/volume/length/count groups; compatible unit detection
+- **Emoji picker** — Full emoji keyboard with 8 categories (Food, Drinks, Condiments, Symbols, People, Places, Time, Money) and 200+ emojis
+- **Extended product model** — Added `base_unit`, `conversion_factor`, `cost_price` fields
+
+### Phase 6 — Dynamic Tables, Categories, Hold Orders ✅
+- **Dynamic tables** — `tables` table in Supabase; managed from Admin page; Cashier reads tables from DB
+- **Dynamic categories** — `categories` table with parent/subcategory support; managed from Admin page
+- **Two-level category navigation** — Cashier shows parent categories; clicking one with subcategories shows sub-row
+- **Hold orders** — Cart can be held (saved to localStorage), multiple holds supported, persists across page reloads
+- **Admin Page** — Manage tables (add/edit/delete with seat count) and categories (add/edit/delete with subcategories and emoji picker)
+
+### Phase 7 — Reports Charts ✅
+- **Recharts 2** integrated for data visualization
+- **Revenue Trend Bar Chart** — Responsive `BarChart` with 7-day comparison, hover tooltips, dynamic color intensity
+- **Top Selling Items Pie Chart** — Donut chart with legend, hover tooltips showing qty sold, sidebar revenue list
+- **All charts** update when switching Today/Week/Month period
+
+### Phase 8 — Localization (EN/MM) + Dark/Light Theme ✅
+- **Dark/Light mode** — `themeStore` with localStorage persistence; toggle from sidebar footer (🌙/☀️)
+- **Light mode CSS** — `index.css` has `.light` class overrides for all dark theme colors
+- **English/Burmese (EN/MM)** — `i18nStore` with 80+ translation keys; toggle from sidebar footer (🇬🇧/🇲🇲)
+- **Translated pages** — Sidebar menu items, Reports page title/KPI labels
+- **App wrapper** — `<div className={theme}>` applies `dark` or `light` class to root
 
 ## Notes
 
