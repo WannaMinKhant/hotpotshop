@@ -1,6 +1,5 @@
 // zustand store for UI state
 import { create } from 'zustand';
-import { supabase } from '../lib/supabase';
 
 // Dashboard UI Store (sidebar, theme, modals)
 interface DashboardUIState {

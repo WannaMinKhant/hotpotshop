@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useAuthStore } from '../stores/authStore';
 
 type ModuleName = 'dashboard' | 'cashier' | 'kitchen' | 'orders' | 'stock' | 'customers' | 'staff' | 'reports';
 
 interface SidebarProps {
-  activeModule: ModuleName;
+  activeModule: string;
   onModuleChange: (module: ModuleName) => void;
+  onLogout?: () => void;
 }
 
 const menuItems: { id: ModuleName; label: string; icon: string }[] = [
@@ -18,8 +20,11 @@ const menuItems: { id: ModuleName; label: string; icon: string }[] = [
   { id: 'reports', label: 'Reports', icon: '📈' },
 ];
 
-const Sidebar = ({ activeModule, onModuleChange }: SidebarProps) => {
+const Sidebar = ({ activeModule, onModuleChange, onLogout }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(false);
+  const { user } = useAuthStore();
+  const userEmail = user?.email || 'Admin User';
+  const userInitial = userEmail.charAt(0).toUpperCase();
 
   return (
     <div className={`${collapsed ? 'w-20' : 'w-64'} bg-[#1a1d23] border-r border-gray-700 flex flex-col transition-all duration-300 h-screen`}>
@@ -68,13 +73,21 @@ const Sidebar = ({ activeModule, onModuleChange }: SidebarProps) => {
         <div className="p-4 border-t border-gray-700">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center text-black font-bold">
-              A
+              {userInitial}
             </div>
-            <div>
-              <p className="text-sm font-semibold text-white">Admin User</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white truncate">{userEmail}</p>
               <p className="text-xs text-green-400">● Online</p>
             </div>
           </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="mt-3 w-full bg-red-500/20 hover:bg-red-500/30 text-red-400 py-2 rounded-lg text-sm font-semibold transition"
+            >
+              🚪 Sign Out
+            </button>
+          )}
         </div>
       )}
     </div>

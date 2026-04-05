@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useOrderStore } from '../stores/orderStore';
-import type { OrderStatusEnum } from '../types';
 
 const OrdersPage = () => {
   const { orders, loading, error, fetchOrders, updateOrder, deleteOrder } = useOrderStore();

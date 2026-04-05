@@ -9,9 +9,17 @@ interface OrderState {
   error: string | null;
 
   fetchOrders: () => Promise<void>;
-  addOrder: (newOrder: Omit<Order, 'id'>, items: Omit<OrderItem, 'id' | 'order_id'>[]) => Promise<void>;
+  addOrder: (newOrder: Omit<Order, 'id' | 'order_number'>, items: Omit<OrderItem, 'id' | 'order_id'>[]) => Promise<string>;
   updateOrder: (id: number, updates: Partial<Order>) => Promise<void>;
   deleteOrder: (id: number) => Promise<void>;
+}
+
+// Generate unique order number: ORD-YYYYMMDD-XXX
+function generateOrderNumber(): string {
+  const now = new Date();
+  const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const seq = String(Math.floor(Math.random() * 900) + 100);
+  return `ORD-${date}-${seq}`;
 }
 
 export const useOrderStore = create<OrderState>((set) => ({
@@ -28,7 +36,8 @@ export const useOrderStore = create<OrderState>((set) => ({
         .order('created_at', { ascending: false });
       if (error) throw error;
       set({ orders: data || [] });
-    } catch (e: any) {
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to fetch orders' });
     } finally {
       set({ loading: false });
     }
@@ -37,23 +46,55 @@ export const useOrderStore = create<OrderState>((set) => ({
   addOrder: async (newOrder, items) => {
     set({ loading: true, error: null });
     try {
+      const orderNumber = generateOrderNumber();
+
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
-        .insert([{ ...newOrder }])
+        .insert([{ ...newOrder, order_number: orderNumber }])
         .select()
         .single();
       if (orderError) throw orderError;
 
       if (items.length > 0) {
-        const itemsWithOrderId = items.map(item => ({ ...item, order_id: orderData.id }));
+        const itemsWithOrderId = items.map((item) => ({ ...item, order_id: orderData.id }));
         const { error: itemsError } = await supabase
           .from('order_items')
           .insert(itemsWithOrderId);
         if (itemsError) throw itemsError;
+
+        // Record stock movements for each item sold
+        const movementRecords = items.map((item) => ({
+          product_id: item.product_id,
+          movement_type: 'sale' as const,
+          quantity: item.quantity,
+          unit: 'pcs',
+          reference: orderNumber,
+          notes: `Order ${orderNumber}`,
+        }));
+        await supabase.from('stock_movements').insert(movementRecords);
+
+        // Decrement product stock
+        for (const item of items) {
+          const { data: product } = await supabase
+            .from('products')
+            .select('stock_quantity')
+            .eq('id', item.product_id)
+            .single();
+          if (product) {
+            await supabase
+              .from('products')
+              .update({ stock_quantity: Math.max(0, product.stock_quantity - item.quantity) })
+              .eq('id', item.product_id);
+          }
+        }
       }
 
-      set((state) => ({ orders: [{ ...orderData, items }, ...state.orders] }));
-    } catch (e: any) {
+      const enrichedOrder = { ...orderData, items };
+      set((state) => ({ orders: [enrichedOrder, ...state.orders] }));
+      return orderNumber;
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to add order' });
+      return '';
     } finally {
       set({ loading: false });
     }
@@ -72,7 +113,8 @@ export const useOrderStore = create<OrderState>((set) => ({
       set((state) => ({
         orders: state.orders.map((o) => (o.id === id ? { ...o, ...data } : o)),
       }));
-    } catch (e: any) {
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to update order' });
     } finally {
       set({ loading: false });
     }
@@ -85,7 +127,8 @@ export const useOrderStore = create<OrderState>((set) => ({
       const { error } = await supabase.from('orders').delete().eq('id', id);
       if (error) throw error;
       set((state) => ({ orders: state.orders.filter((o) => o.id !== id) }));
-    } catch (e: any) {
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to delete order' });
     } finally {
       set({ loading: false });
     }

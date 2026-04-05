@@ -28,7 +28,8 @@ export const useCustomerStore = create<CustomerState>((set) => ({
         .order('name');
       if (error) throw error;
       set({ customers: data || [] });
-    } catch (e: any) {
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to fetch customers' });
     } finally {
       set({ loading: false });
     }
@@ -44,7 +45,8 @@ export const useCustomerStore = create<CustomerState>((set) => ({
         .single();
       if (error) throw error;
       set((state) => ({ customers: [data, ...state.customers] }));
-    } catch (e: any) {
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to add customer' });
     } finally {
       set({ loading: false });
     }
@@ -63,7 +65,8 @@ export const useCustomerStore = create<CustomerState>((set) => ({
       set((state) => ({
         customers: state.customers.map((c) => (c.id === id ? { ...c, ...data } : c)),
       }));
-    } catch (e: any) {
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to update customer' });
     } finally {
       set({ loading: false });
     }
@@ -75,7 +78,8 @@ export const useCustomerStore = create<CustomerState>((set) => ({
       const { error } = await supabase.from('customers').delete().eq('id', id);
       if (error) throw error;
       set((state) => ({ customers: state.customers.filter((c) => c.id !== id) }));
-    } catch (e: any) {
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to delete customer' });
     } finally {
       set({ loading: false });
     }

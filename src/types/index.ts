@@ -16,10 +16,27 @@ export interface Product {
   category: 'bases' | 'meats' | 'seafood' | 'veggies' | 'noodles' | 'drinks' | 'sauces';
   stock_quantity: number;
   unit: string;
+  base_unit?: string;
+  conversion_factor?: number;
   reorder_point: number;
   price: number;
   cost_price?: number;
   emoji?: string;
+  created_at?: string;
+}
+
+export interface StockMovement {
+  id?: number;
+  product_id: number;
+  product_name?: string;
+  movement_type: 'purchase' | 'sale' | 'adjustment' | 'waste' | 'return';
+  quantity: number;
+  unit: string;
+  reference?: string;
+  notes?: string;
+  cost_per_unit?: number;
+  total_cost?: number;
+  created_by?: string;
   created_at?: string;
 }
 
@@ -35,6 +52,7 @@ export interface Order {
   tax_amount: number;
   total: number;
   notes?: string;
+  payment_method?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -63,4 +81,13 @@ export interface Customer {
   created_at?: string;
 }
 
-export type TableName = 'staff' | 'products' | 'orders' | 'order_items' | 'customers';
+export type TableName = 'staff' | 'products' | 'orders' | 'order_items' | 'customers' | 'stock_movements';
+
+// Enum type aliases for component imports
+export type OrderStatusEnum = Order['status'];
+export type OrderTypeEnum = Order['order_type'];
+export type RoleEnum = Staff['role'];
+export type StatusEnum = Staff['status'];
+export type ProductCategory = Product['category'];
+export type CustomerTier = Customer['tier'];
+export type MovementType = StockMovement['movement_type'];

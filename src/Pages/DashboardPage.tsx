@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import Sidebar from '../Components/Sidebar';
 import DashboardHome from '../Components/DashboardHome';
 import CashierPage from '../Components/CashierPage';
@@ -9,9 +8,7 @@ import CustomersPage from '../Components/CustomersPage';
 import StaffPage from '../Components/StaffPage';
 import ReportsPage from '../Components/ReportsPage';
 
-type ModuleName = 'dashboard' | 'cashier' | 'kitchen' | 'orders' | 'stock' | 'customers' | 'staff' | 'reports';
-
-const renderModule = (activeModule: ModuleName) => {
+const renderModule = (activeModule: string) => {
   switch (activeModule) {
     case 'dashboard':
       return <DashboardHome />;
@@ -34,12 +31,16 @@ const renderModule = (activeModule: ModuleName) => {
   }
 };
 
-const DashboardPage = () => {
-  const [activeModule, setActiveModule] = useState<ModuleName>('dashboard');
+interface DashboardPageProps {
+  activeModule: string;
+  onNavigate: (path: string) => void;
+  onLogout: () => void;
+}
 
+const DashboardPage = ({ activeModule, onNavigate, onLogout }: DashboardPageProps) => {
   return (
     <div className="flex bg-[#1e2128] h-screen overflow-hidden">
-      <Sidebar activeModule={activeModule} onModuleChange={setActiveModule} />
+      <Sidebar activeModule={activeModule} onModuleChange={(mod) => onNavigate(`/${mod}`)} onLogout={onLogout} />
       <div className="flex-1 overflow-hidden">
         {renderModule(activeModule)}
       </div>

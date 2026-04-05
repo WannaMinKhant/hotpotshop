@@ -1,4 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useProductStore } from '../stores/productsStore';
+import { useOrderStore } from '../stores/orderStore';
+import { useToastStore } from '../stores/toastStore';
+import type { Product, ProductCategory } from '../types';
 
 interface CartItem {
   id: number;
@@ -8,63 +12,52 @@ interface CartItem {
   emoji: string;
 }
 
-const categories = [
+const categoryList: { id: ProductCategory | 'all'; name: string; emoji: string }[] = [
+  { id: 'all', name: 'All', emoji: '📋' },
   { id: 'bases', name: 'Hotpot Bases', emoji: '🍲' },
   { id: 'meats', name: 'Meats', emoji: '🥩' },
   { id: 'seafood', name: 'Seafood', emoji: '🦐' },
   { id: 'veggies', name: 'Vegetables', emoji: '🥬' },
   { id: 'noodles', name: 'Noodles & Rice', emoji: '🍜' },
   { id: 'drinks', name: 'Drinks', emoji: '🍹' },
-];
-
-const allProducts = [
-  { id: 1, name: 'Spicy Hotpot Base', category: 'bases', price: 12.00, emoji: '🌶️' },
-  { id: 2, name: 'Herbal Hotpot Base', category: 'bases', price: 10.00, emoji: '🍲' },
-  { id: 3, name: 'Tom Yum Hotpot Base', category: 'bases', price: 15.00, emoji: '🌿' },
-  { id: 4, name: 'Mushroom Hotpot Base', category: 'bases', price: 10.00, emoji: '🍄' },
-  { id: 5, name: 'Beef Slicer Platter', category: 'meats', price: 18.00, emoji: '🥩' },
-  { id: 6, name: 'Lamb Rolls', category: 'meats', price: 16.00, emoji: '🐑' },
-  { id: 7, name: 'Pork Belly', category: 'meats', price: 14.00, emoji: '🐷' },
-  { id: 8, name: 'Chicken Slices', category: 'meats', price: 12.00, emoji: '🐔' },
-  { id: 9, name: 'Fresh Shrimp x6', category: 'seafood', price: 12.00, emoji: '🦐' },
-  { id: 10, name: 'Squid Tentacles', category: 'seafood', price: 10.00, emoji: '🦑' },
-  { id: 11, name: 'Fish Fillet', category: 'seafood', price: 15.00, emoji: '🐟' },
-  { id: 12, name: 'Crab Sticks x4', category: 'seafood', price: 8.00, emoji: '🦀' },
-  { id: 13, name: 'Napa Cabbage', category: 'veggies', price: 4.00, emoji: '🥬' },
-  { id: 14, name: 'Tofu Block', category: 'veggies', price: 3.00, emoji: '🧈' },
-  { id: 15, name: 'Mushroom Mix', category: 'veggies', price: 6.00, emoji: '🍄' },
-  { id: 16, name: 'Glass Noodles', category: 'noodles', price: 4.00, emoji: '🍜' },
-  { id: 17, name: 'Udon Noodles', category: 'noodles', price: 5.00, emoji: '🍜' },
-  { id: 18, name: 'Steamed Rice', category: 'noodles', price: 2.00, emoji: '🍚' },
-  { id: 19, name: 'Iced Lemon Tea', category: 'drinks', price: 3.50, emoji: '🍋' },
-  { id: 20, name: 'Plum Juice', category: 'drinks', price: 4.00, emoji: '🍹' },
-  { id: 21, name: 'Beer (Can)', category: 'drinks', price: 5.00, emoji: '🍺' },
+  { id: 'sauces', name: 'Sauces', emoji: '🧂' },
 ];
 
 const CashierPage = () => {
-  const [activeCategory, setActiveCategory] = useState('bases');
+  const { products, fetchProducts } = useProductStore();
+  const { addOrder } = useOrderStore();
+  const addToast = useToastStore((s) => s.addToast);
+
+  const [activeCategory, setActiveCategory] = useState<ProductCategory | 'all'>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedTable, setSelectedTable] = useState(5);
-  const [orderType, setOrderType] = useState<string>('dinein');
+  const [orderType, setOrderType] = useState<string>('dine-in');
   const [showPayment, setShowPayment] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const filteredProducts = allProducts.filter(p => 
-    p.category === activeCategory && 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
-  const addToCart = (product: typeof allProducts[0]) => {
+  const filteredProducts = products.filter(p => {
+    const matchesCategory = activeCategory === 'all' || p.category === activeCategory;
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+   
+  
+  const addToCart = (product: Product) => {
+    if (!product.id) return;
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
-        return prev.map(item => 
-          item.id === product.id 
-            ? { ...item, quantity: item.quantity + 1 } 
+        return prev.map(item =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
             : item
         );
       }
-      return [...prev, { id: product.id, name: product.name, quantity: 1, price: product.price, emoji: product.emoji }];
+      return [...prev, { id: product.id!, name: product.name, quantity: 1, price: product.price, emoji: product.emoji || '🍽️' }];
     });
   };
 
@@ -79,6 +72,46 @@ const CashierPage = () => {
   const tax = subtotal * 0.1;
   const total = subtotal + tax;
 
+  const handlePayment = async (method: string) => {
+    if (cart.length === 0 || submitting) return;
+    setSubmitting(true);
+    try {
+      const orderItems = cart.map(item => ({
+        product_id: item.id,
+        product_name: item.name,
+        quantity: item.quantity,
+        unit_price: item.price,
+        subtotal: item.price * item.quantity,
+      }));
+
+      const orderNumber = await addOrder(
+        {
+          order_type: orderType as 'dine-in' | 'takeout' | 'delivery',
+          status: 'pending',
+          table_number: orderType === 'dine-in' ? selectedTable : undefined,
+          subtotal,
+          tax_amount: tax,
+          total,
+          notes: `Payment: ${method}`,
+          payment_method: method,
+        },
+        orderItems,
+      );
+
+      if (orderNumber) {
+        setCart([]);
+        setShowPayment(false);
+        addToast(`Order ${orderNumber} created via ${method}!`, 'success');
+      } else {
+        addToast('Failed to create order.', 'error');
+      }
+    } catch {
+      addToast('Failed to create order. Please try again.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="h-screen flex bg-[#1e2128] overflow-hidden">
       {/* LEFT: Products */}
@@ -88,14 +121,14 @@ const CashierPage = () => {
           <div>
             <h1 className="text-2xl font-bold text-yellow-400">💰 Cashier / POS</h1>
             <p className="text-sm text-gray-400">
-              {orderType === 'dinein' ? `Dine-in • Table ${selectedTable}` : 'Takeout'}
+              {orderType === 'dine-in' ? `Dine-in • Table ${selectedTable}` : 'Takeout'}
             </p>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex bg-[#272a30] rounded-lg p-1">
               <button
-                onClick={() => setOrderType('dinein')}
-                className={`px-4 py-2 rounded-md transition ${orderType === 'dinein' ? 'bg-yellow-500 text-black font-bold' : 'text-gray-400 hover:text-white'}`}
+                onClick={() => setOrderType('dine-in')}
+                className={`px-4 py-2 rounded-md transition ${orderType === 'dine-in' ? 'bg-yellow-500 text-black font-bold' : 'text-gray-400 hover:text-white'}`}
               >
                 Dine-in
               </button>
@@ -106,14 +139,14 @@ const CashierPage = () => {
                 Takeout
               </button>
             </div>
-            {orderType === 'dinein' && (
+            {orderType === 'dine-in' && (
               <select
                 value={selectedTable}
                 onChange={e => setSelectedTable(Number(e.target.value))}
                 className="bg-[#272a30] border border-gray-600 rounded-lg px-3 py-2 text-white"
               >
                 {Array.from({ length: 15 }, (_, i) => (
-                  <option key={i+1} value={i+1}>Table {i+1}</option>
+                  <option key={i + 1} value={i + 1}>Table {i + 1}</option>
                 ))}
               </select>
             )}
@@ -131,14 +164,14 @@ const CashierPage = () => {
 
         {/* Categories */}
         <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-          {categories.map(cat => (
+          {categoryList.map(cat => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
               className={`${activeCategory === cat.id ? 'bg-yellow-500 text-black ring-2 ring-yellow-500' : 'bg-[#272a30] text-gray-300'}
                 px-4 py-2 rounded-lg font-semibold transition flex items-center gap-2 whitespace-nowrap`}
             >
-              <span text-xl>{cat.emoji}</span>
+              <span className="text-xl">{cat.emoji}</span>
               {cat.name}
             </button>
           ))}
@@ -146,29 +179,33 @@ const CashierPage = () => {
 
         {/* Products */}
         <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-4 lg:grid-cols-5 gap-3">
-            {filteredProducts.map(product => (
-              <button
-                key={product.id}
-                onClick={() => addToCart(product)}
-                className="bg-[#272a30] border border-gray-700 rounded-xl p-3 text-left hover:border-yellow-400
-                  hover:shadow-lg hover:shadow-yellow-400/10 transition group"
-              >
-                <div className="text-4xl mb-2 text-center group-hover:scale-110 transition">{product.emoji}</div>
-                <p className="font-semibold text-white text-sm">{product.name}</p>
-                <p className="text-lg font-bold text-green-400 mt-1">${product.price.toFixed(2)}</p>
-              </button>
-            ))}
-          </div>
+          {products.length === 0 ? (
+            <div className="text-center text-gray-400 py-12">Loading products...</div>
+          ) : (
+            <div className="grid grid-cols-4 lg:grid-cols-5 gap-3">
+              {filteredProducts.map(product => (
+                <button
+                  key={product.id}
+                  onClick={() => addToCart(product)}
+                  className="bg-[#272a30] border border-gray-700 rounded-xl p-3 text-left hover:border-yellow-400
+                    hover:shadow-lg hover:shadow-yellow-400/10 transition group"
+                >
+                  <div className="text-4xl mb-2 text-center group-hover:scale-110 transition">{product.emoji || '🍽️'}</div>
+                  <p className="font-semibold text-white text-sm">{product.name}</p>
+                  <p className="text-lg font-bold text-green-400 mt-1">${product.price.toFixed(2)}</p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* RIGHT: Cart */}
       <div className="w-96 bg-[#1f2329] flex flex-col border-l border-gray-700">
         <div className="p-4 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-yellow-400">Order #{String(Math.floor(Math.random()*900+100))}</h2>
+          <h2 className="text-xl font-bold text-yellow-400">🛒 New Order</h2>
           <p className="text-sm text-gray-400">
-            {orderType === 'dinein' ? `Table ${selectedTable}` : 'Takeout'} • {cart.length} items
+            {orderType === 'dine-in' ? `Table ${selectedTable}` : 'Takeout'} • {cart.length} items
           </p>
         </div>
 
@@ -205,7 +242,7 @@ const CashierPage = () => {
               <span>Total</span><span className="text-green-400">${total.toFixed(2)}</span>
             </div>
           </div>
-          <button 
+          <button
             onClick={() => setShowPayment(true)}
             disabled={cart.length === 0}
             className={`w-full py-3 rounded-lg text-lg font-bold mb-2 transition ${
@@ -230,11 +267,35 @@ const CashierPage = () => {
                 <p className="text-3xl font-bold text-green-400">${total.toFixed(2)}</p>
               </div>
               <div className="space-y-2 mb-4">
-                <button className="w-full bg-blue-500 hover:bg-blue-400 py-3 rounded-lg text-white font-bold">💳 Card Payment</button>
-                <button className="w-full bg-green-500 hover:bg-green-400 py-3 rounded-lg text-black font-bold">💵 Cash</button>
-                <button className="w-full bg-purple-500 hover:bg-purple-400 py-3 rounded-lg text-white font-bold">📱 QR/Digital</button>
+                <button
+                  onClick={() => handlePayment('card')}
+                  disabled={submitting}
+                  className="w-full bg-blue-500 hover:bg-blue-400 py-3 rounded-lg text-white font-bold disabled:opacity-50"
+                >
+                  💳 Card Payment
+                </button>
+                <button
+                  onClick={() => handlePayment('cash')}
+                  disabled={submitting}
+                  className="w-full bg-green-500 hover:bg-green-400 py-3 rounded-lg text-black font-bold disabled:opacity-50"
+                >
+                  💵 Cash
+                </button>
+                <button
+                  onClick={() => handlePayment('qr')}
+                  disabled={submitting}
+                  className="w-full bg-purple-500 hover:bg-purple-400 py-3 rounded-lg text-white font-bold disabled:opacity-50"
+                >
+                  📱 QR/Digital
+                </button>
               </div>
-              <button onClick={() => setShowPayment(false)} className="w-full bg-gray-600 hover:bg-gray-500 py-2 rounded-lg text-white">Cancel</button>
+              <button
+                onClick={() => setShowPayment(false)}
+                disabled={submitting}
+                className="w-full bg-gray-600 hover:bg-gray-500 py-2 rounded-lg text-white disabled:opacity-50"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}

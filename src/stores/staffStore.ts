@@ -1,6 +1,6 @@
 // CRUD for Staff
 import { create } from 'zustand';
-import { Staff } from '../types';
+import type { Staff } from '../types';
 import { supabase } from '../lib/supabase';
 
 interface StaffState {
@@ -14,7 +14,7 @@ interface StaffState {
   deleteStaff: (id: number) => Promise<void>;
 }
 
-export const useStaffStore = create<StaffState>((set, get) => ({
+export const useStaffStore = create<StaffState>((set) => ({
   staff: [],
   loading: false,
   error: null,
@@ -28,8 +28,8 @@ export const useStaffStore = create<StaffState>((set, get) => ({
         .order('created_at', { ascending: false });
       if (error) throw error;
       set({ staff: data || [] });
-    } catch (e: any) {
-      // Set error
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to fetch staff' });
     } finally {
       set({ loading: false });
     }
@@ -45,7 +45,8 @@ export const useStaffStore = create<StaffState>((set, get) => ({
         .single();
       if (error) throw error;
       set((state) => ({ staff: [data, ...state.staff] }));
-    } catch (e: any) {
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to add staff' });
     } finally {
       set({ loading: false });
     }
@@ -64,7 +65,8 @@ export const useStaffStore = create<StaffState>((set, get) => ({
       set((state) => ({
         staff: state.staff.map((s) => (s.id === id ? { ...s, ...data } : s)),
       }));
-    } catch (e: any) {
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to update staff' });
     } finally {
       set({ loading: false });
     }
@@ -76,7 +78,8 @@ export const useStaffStore = create<StaffState>((set, get) => ({
       const { error } = await supabase.from('staff').delete().eq('id', id);
       if (error) throw error;
       set((state) => ({ staff: state.staff.filter((s) => s.id !== id) }));
-    } catch (e: any) {
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to delete staff' });
     } finally {
       set({ loading: false });
     }
