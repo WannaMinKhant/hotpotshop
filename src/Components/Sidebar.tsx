@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useI18nStore } from '../stores/i18nStore';
 import { useThemeStore } from '../stores/themeStore';
+import { useNotificationStore } from '../stores/notificationStore';
+import { rolePermissions } from '../lib/roles';
 
-type ModuleName = 'dashboard' | 'cashier' | 'kitchen' | 'orders' | 'stock' | 'customers' | 'staff' | 'reports';
+type ModuleName = 'dashboard' | 'cashier' | 'kitchen' | 'orders' | 'stock' | 'recipes' | 'customers' | 'staff' | 'reports' | 'users' | 'admin';
 
 interface SidebarProps {
   activeModule: string;
@@ -11,24 +13,52 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
-const menuItems: { id: ModuleName; label: string; icon: string }[] = [
+const allMenuItems: { id: ModuleName; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'sidebar.dashboard', icon: '📊' },
   { id: 'cashier', label: 'sidebar.cashier', icon: '💰' },
   { id: 'kitchen', label: 'sidebar.kitchen', icon: '🍲' },
   { id: 'orders', label: 'sidebar.orders', icon: '📋' },
   { id: 'stock', label: 'sidebar.stock', icon: '📦' },
+  { id: 'recipes', label: 'sidebar.recipes', icon: '📖' },
   { id: 'customers', label: 'sidebar.customers', icon: '👥' },
   { id: 'staff', label: 'sidebar.staff', icon: '🧑‍💼' },
   { id: 'reports', label: 'sidebar.reports', icon: '📈' },
+  { id: 'users', label: 'sidebar.users', icon: '🔑' },
+  { id: 'admin', label: 'sidebar.admin', icon: '⚙️' },
 ];
 
 const Sidebar = ({ activeModule, onModuleChange, onLogout }: SidebarProps) => {
   const [collapsed, setCollapsed] = useState(false);
-  const { user } = useAuthStore();
+  const { user, role } = useAuthStore();
   const { lang, setLang, t } = useI18nStore();
   const { toggleTheme, theme } = useThemeStore();
+  const { kitchenCount, ordersCount, fetchCounts, subscribeToOrders } = useNotificationStore();
   const userEmail = user?.email || 'Admin User';
+  const userRole = role || 'admin';
   const userInitial = userEmail.charAt(0).toUpperCase();
+
+  // Initialize real-time subscriptions
+  useEffect(() => {
+    fetchCounts();
+    subscribeToOrders();
+    
+    // Cleanup on unmount
+    return () => {
+      useNotificationStore.getState().unsubscribe();
+    };
+  }, [fetchCounts, subscribeToOrders]);
+
+  // Filter menu items based on user role permissions
+  const menuItems = allMenuItems.filter(item =>
+    rolePermissions[userRole as keyof typeof rolePermissions]?.includes(item.id)
+  );
+
+  // Badge counts for specific modules
+  const getBadgeCount = (moduleId: string): number => {
+    if (moduleId === 'kitchen') return kitchenCount;
+    if (moduleId === 'orders') return ordersCount;
+    return 0;
+  };
 
   return (
     <div className={`${collapsed ? 'w-20' : 'w-64'} bg-[#1a1d23] border-r border-gray-700 flex flex-col transition-all duration-300 h-screen`}>
@@ -57,21 +87,37 @@ const Sidebar = ({ activeModule, onModuleChange, onLogout }: SidebarProps) => {
           <div className="p-4 text-gray-500 text-sm text-center">No access</div>
         ) : (
           <ul className="space-y-1 px-2">
-            {menuItems.map((item) => (
-              <li key={item.id}>
-                <button
-                  onClick={() => onModuleChange(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 ${
-                    activeModule === item.id
-                      ? 'bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/20'
-                      : 'text-gray-300 hover:bg-[#272a30] hover:text-white'
-                  }`}
-                >
-                  <span className="text-xl shrink-0">{item.icon}</span>
-                  {!collapsed && <span className="truncate">{t(item.label)}</span>}
-                </button>
-              </li>
-            ))}
+            {menuItems.map((item) => {
+              const badgeCount = getBadgeCount(item.id);
+              return (
+                <li key={item.id}>
+                  <button
+                    onClick={() => onModuleChange(item.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 ${
+                      activeModule === item.id
+                        ? 'bg-yellow-500 text-black font-bold shadow-lg shadow-yellow-500/20'
+                        : 'text-gray-300 hover:bg-[#272a30] hover:text-white'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">{item.icon}</span>
+                    {!collapsed && (
+                      <>
+                        <span className="truncate flex-1 text-left">{t(item.label)}</span>
+                        {badgeCount > 0 && (
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                            activeModule === item.id
+                              ? 'bg-black/20 text-black'
+                              : 'bg-red-500 text-white'
+                          }`}>
+                            {badgeCount}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </nav>

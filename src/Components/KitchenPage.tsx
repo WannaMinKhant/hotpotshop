@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useOrderStore } from '../stores/orderStore';
+import { useNotificationStore } from '../stores/notificationStore';
 import type { Order, OrderItem } from '../types';
 
 type EnrichedOrder = Order & { minsAgo: number; timeLabel: string; isUrgent: boolean };
@@ -20,6 +21,7 @@ function enrichOrders(orders: (Order & { items?: OrderItem[] })[], now: number):
 
 const KitchenPage = () => {
   const { orders, loading, error, fetchOrders, updateOrder } = useOrderStore();
+  const { kitchenCount } = useNotificationStore();
   const [now, setNow] = useState(Date.now());
 
   // Update timestamp every 30s so "time ago" stays fresh
@@ -30,7 +32,7 @@ const KitchenPage = () => {
 
   useEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+  }, [fetchOrders, kitchenCount]); // Re-fetch when count changes
 
   const enrichedOrders = useMemo(() => enrichOrders(orders, now), [orders, now]);
 

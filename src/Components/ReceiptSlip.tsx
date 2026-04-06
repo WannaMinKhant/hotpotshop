@@ -1,7 +1,7 @@
 // Receipt slip printer component
 import { useEffect, useRef } from 'react';
 
-interface ReceiptData {
+export interface ReceiptData {
   orderNumber: string;
   items: { name: string; qty: number; price: number; subtotal: number }[];
   subtotal: number;

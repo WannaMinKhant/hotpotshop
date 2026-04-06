@@ -3,6 +3,21 @@ import { useOrderStore } from '../stores/orderStore';
 import { useProductStore } from '../stores/productsStore';
 import { useCustomerStore } from '../stores/customerStore';
 import { useI18nStore } from '../stores/i18nStore';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
+
+const COLORS = ['#facc15', '#22c55e', '#3b82f6', '#f97316', '#a855f7', '#ef4444', '#14b8a6', '#ec4899'];
 
 const ReportsPage = () => {
   const { orders, fetchOrders } = useOrderStore();
@@ -40,6 +55,64 @@ const ReportsPage = () => {
   const completedOrders = filteredOrders.filter(o => o.status === 'completed');
   const avgOrderValue = completedOrders.length ? completedOrders.reduce((s, o) => s + o.total, 0) / completedOrders.length : 0;
 
+  // 7-Day Revenue Data (always show last 7 days)
+  const sevenDayRevenue = useMemo(() => {
+    const data: { day: string; revenue: number; orders: number }[] = [];
+    const now = new Date();
+
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dayStr = date.toLocaleDateString('en-US', { weekday: 'short' });
+      const dateStr = date.toDateString();
+
+      const dayOrders = orders.filter(o => {
+        if (!o.created_at || o.status !== 'completed') return false;
+        return new Date(o.created_at).toDateString() === dateStr;
+      });
+
+      const dayRevenue = dayOrders.reduce((s, o) => s + (o.total || 0), 0);
+      data.push({ day: dayStr, revenue: dayRevenue, orders: dayOrders.length });
+    }
+
+    return data;
+  }, [orders]);
+
+  // Top Selling Items (by quantity sold)
+  const topItems = useMemo(() => {
+    const itemMap: Record<string, { name: string; qty: number; revenue: number }> = {};
+
+    filteredOrders.forEach(o => {
+      o.items?.forEach(item => {
+        if (!itemMap[item.product_name]) {
+          itemMap[item.product_name] = { name: item.product_name, qty: 0, revenue: 0 };
+        }
+        itemMap[item.product_name].qty += item.quantity;
+        itemMap[item.product_name].revenue += item.subtotal || 0;
+      });
+    });
+
+    return Object.values(itemMap)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 8)
+      .map(item => ({
+        name: item.name.length > 12 ? item.name.slice(0, 10) + '...' : item.name,
+        fullName: item.name,
+        qty: item.qty,
+        revenue: item.revenue,
+      }));
+  }, [filteredOrders]);
+
+  // Pie chart data
+  const pieData = useMemo(() => {
+    return topItems.map(item => ({
+      name: item.name,
+      value: item.revenue,
+      qty: item.qty,
+      fullName: item.fullName,
+    }));
+  }, [topItems]);
+
   // Order type breakdown
   const orderTypeBreakdown = useMemo(() => {
     const counts: Record<string, { count: number; revenue: number }> = { 'dine-in': { count: 0, revenue: 0 }, takeout: { count: 0, revenue: 0 }, delivery: { count: 0, revenue: 0 } };
@@ -51,42 +124,18 @@ const ReportsPage = () => {
     return counts;
   }, [filteredOrders]);
 
-  // Category revenue (from order_items)
-  const categoryBreakdown = useMemo(() => {
-    const counts: Record<string, { qty: number; revenue: number }> = {};
-    filteredOrders.forEach(o => {
-      o.items?.forEach(item => {
-        if (!counts[item.product_name]) counts[item.product_name] = { qty: 0, revenue: 0 };
-        counts[item.product_name].qty += item.quantity;
-        counts[item.product_name].revenue += item.subtotal;
-      });
-    });
-    return Object.entries(counts)
-      .sort(([, a], [, b]) => b.revenue - a.revenue)
-      .slice(0, 8);
-  }, [filteredOrders]);
-
-  // Daily revenue for chart
-  const dailyRevenue = useMemo(() => {
-    const map: Record<string, number> = {};
-    filteredOrders.filter(o => o.status === 'completed').forEach(o => {
-      const day = o.created_at ? new Date(o.created_at).toLocaleDateString() : 'Unknown';
-      map[day] = (map[day] || 0) + o.total;
-    });
-    return Object.entries(map).slice(-7);
-  }, [filteredOrders]);
-
-  const maxDaily = Math.max(...dailyRevenue.map(([, v]) => v), 1);
-
-  // Payment method breakdown (from notes)
+  // Payment method breakdown
   const paymentBreakdown = useMemo(() => {
-    const counts: Record<string, number> = {};
-    filteredOrders.filter(o => o.status === 'completed').forEach(o => {
-      const method = o.notes?.includes('card') ? 'Card' : o.notes?.includes('cash') ? 'Cash' : 'QR/Digital';
-      counts[method] = (counts[method] || 0) + 1;
+    const counts: Record<string, { count: number; revenue: number }> = {};
+    completedOrders.forEach(o => {
+      const method = o.payment_method || 'cash';
+      const label = method === 'card' ? '💳 Card' : method === 'qr' ? '📱 QR' : '💵 Cash';
+      if (!counts[label]) counts[label] = { count: 0, revenue: 0 };
+      counts[label].count++;
+      counts[label].revenue += o.total || 0;
     });
     return Object.entries(counts);
-  }, [filteredOrders]);
+  }, [completedOrders]);
 
   // Low stock value
   const lowStockValue = products.filter(p => p.stock_quantity <= p.reorder_point).length;
@@ -97,6 +146,7 @@ const ReportsPage = () => {
 
   return (
     <div className="p-6 bg-[#1e2128] h-screen overflow-y-auto">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-white">{t('reports.title')}</h1>
@@ -131,44 +181,89 @@ const ReportsPage = () => {
         </div>
       </div>
 
-      {/* Revenue Chart + Category Breakdown */}
+      {/* Revenue Bar Chart + Top Items Pie Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Daily Revenue Chart */}
+        {/* 7-Day Revenue Bar Chart */}
         <div className="lg:col-span-2 bg-[#272a30] rounded-xl border border-gray-700 p-5">
-          <h2 className="text-xl font-bold text-white mb-4">Revenue Trend</h2>
-          {dailyRevenue.length === 0 ? (
-            <div className="text-center text-gray-400 py-12">No data for this period</div>
+          <h2 className="text-xl font-bold text-white mb-2">📈 7-Day Revenue</h2>
+          <p className="text-gray-500 text-sm mb-4">Completed orders revenue per day</p>
+          {sevenDayRevenue.every(d => d.revenue === 0) ? (
+            <div className="text-center text-gray-400 py-12">No revenue data for this period</div>
           ) : (
-            <div className="flex items-end gap-2 h-48">
-              {dailyRevenue.map(([day, val]) => (
-                <div key={day} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-green-400 text-xs font-bold">${val.toFixed(0)}</span>
-                  <div className="w-full bg-green-500/30 rounded-t transition-all hover:bg-green-500/50" style={{ height: `${(val / maxDaily) * 100}%` }} />
-                  <span className="text-gray-500 text-xs">{day.slice(0, 5)}</span>
-                </div>
-              ))}
-            </div>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={sevenDayRevenue}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="day" stroke="#9ca3af" fontSize={12} />
+                <YAxis stroke="#9ca3af" fontSize={12} tickFormatter={(v: number) => `$${v}`} />
+                <Tooltip
+                  formatter={(value: number, name: string) => {
+                    if (name === 'revenue') return [`$${value.toFixed(2)}`, 'Revenue'];
+                    if (name === 'orders') return [value, 'Orders'];
+                    return [value, name];
+                  }}
+                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
+                  labelStyle={{ color: '#facc15', fontWeight: 'bold' }}
+                />
+                <Bar dataKey="revenue" fill="#22c55e" radius={[6, 6, 0, 0]} name="Revenue" />
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </div>
 
-        {/* Top Categories */}
+        {/* Top Items Pie Chart */}
         <div className="bg-[#272a30] rounded-xl border border-gray-700 p-5">
-          <h2 className="text-xl font-bold text-white mb-4">Top Items</h2>
-          {categoryBreakdown.length === 0 ? (
-            <div className="text-center text-gray-400 py-12">No data</div>
+          <h2 className="text-xl font-bold text-white mb-2">🏆 Top Items</h2>
+          <p className="text-gray-500 text-sm mb-4">By revenue share</p>
+          {pieData.length === 0 ? (
+            <div className="text-center text-gray-400 py-12">No sales data</div>
           ) : (
-            <div className="space-y-3">
-              {categoryBreakdown.map(([name, data], i) => (
-                <div key={name} className="flex items-center gap-3">
-                  <div className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center text-black font-bold text-xs">{i + 1}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm truncate">{name}</p>
-                    <p className="text-gray-500 text-xs">×{data.qty}</p>
+            <>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                  >
+                    {pieData.map((_entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number) => `$${Number(value).toFixed(2)}`}
+                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
+                  />
+                  <Legend
+                    formatter={(value: string) => {
+                      const item = pieData.find(d => d.name === value);
+                      return `${value} (×${item?.qty || 0})`;
+                    }}
+                    wrapperStyle={{ fontSize: '11px' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+
+              {/* Revenue List */}
+              <div className="mt-4 space-y-2">
+                {topItems.map((item, i) => (
+                  <div key={item.name} className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }}>
+                      {i + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-xs truncate" title={item.fullName}>{item.name}</p>
+                      <p className="text-gray-500 text-[10px]">×{item.qty}</p>
+                    </div>
+                    <span className="text-green-400 font-bold text-xs">${item.revenue.toFixed(2)}</span>
                   </div>
-                  <span className="text-green-400 font-bold text-sm">${data.revenue.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -201,15 +296,15 @@ const ReportsPage = () => {
             <div className="text-center text-gray-400 py-8">No completed orders</div>
           ) : (
             <div className="space-y-3">
-              {paymentBreakdown.map(([method, count]) => (
+              {paymentBreakdown.map(([method, data]) => (
                 <div key={method} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">{method === 'Card' ? '💳' : method === 'Cash' ? '💵' : '📱'}</span>
+                    <span className="text-2xl">{method.includes('Card') ? '💳' : method.includes('QR') ? '📱' : '💵'}</span>
                     <span className="text-white font-semibold">{method}</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-green-400 font-bold">{count}</p>
-                    <p className="text-gray-500 text-sm">{filteredOrders.filter(o => o.status === 'completed').length ? Math.round((count / filteredOrders.filter(o => o.status === 'completed').length) * 100) : 0}%</p>
+                    <p className="text-green-400 font-bold">{data.count} · ${data.revenue.toFixed(2)}</p>
+                    <p className="text-gray-500 text-sm">{completedOrders.length ? Math.round((data.count / completedOrders.length) * 100) : 0}%</p>
                   </div>
                 </div>
               ))}

@@ -96,12 +96,19 @@ Run `src/lib/supabase-schema.sql` in your Supabase SQL editor to create all tabl
 
 - **staff** — Employee records with role and status tracking
 - **products** — Inventory items with stock quantities, reorder points, pricing, unit conversion support
+- **tables** — Restaurant tables with table_number, seats, and is_active status
+- **categories** — Product categories with parent/subcategory support, emoji, and sort_order
 - **stock_movements** — Purchase/sale/adjustment/waste/return tracking with cost records
 - **orders** — Customer orders with type, status, and financial totals
 - **order_items** — Line items belonging to orders (CASCADE delete on order removal)
+- **recipes** — Menu items/dishes
+- **recipe_ingredients** — Links recipes to products with quantities
 - **customers** — Customer profiles with loyalty tier and spending history
+- **user_profiles** — Auth users linked to app roles
 
 All tables use `BIGINT GENERATED ALWAYS AS IDENTITY` for primary keys and `TIMESTAMPTZ DEFAULT NOW()` for timestamps.
+
+After creating tables, enable Realtime for all tables in Database → Replication.
 
 ### Authentication
 
@@ -152,11 +159,14 @@ Supabase Auth (email/password) is configured. Users can sign up or sign in via t
 | `/dashboard` | DashboardHome | Overview stats, recent orders, popular items |
 | `/cashier` | CashierPage | POS system — add products to cart, process payments |
 | `/kitchen` | KitchenPage | Kanban board: pending → cooking → ready → delivered |
-| `/orders` | OrdersPage | Full order management with status transitions |
+| `/orders` | OrdersPage | Full order management with status transitions + payment + receipt |
 | `/stock` | StockControlPage | Product CRUD with inline stock editing |
+| `/recipes` | RecipesPage | Recipe CRUD with ingredient management |
 | `/customers` | CustomersPage | Customer CRUD with loyalty tiers |
 | `/staff` | StaffPage | Staff CRUD with roles and duty status |
 | `/reports` | ReportsPage | Analytics with period filters and revenue charts |
+| `/users` | UsersPage | User account management with role assignment |
+| `/admin` | AdminPage | Dynamic table and category management |
 
 ## Stores
 
@@ -171,10 +181,9 @@ Supabase Auth (email/password) is configured. Users can sign up or sign in via t
 | `categoryStore` | Product category CRUD with parent/subcategory support |
 | `tableStore` | Restaurant table CRUD with seat count |
 | `userManagementStore` | User account CRUD (email/password auth) |
-| `uiStore` | Sidebar toggle, current path, modal state |
 | `authStore` | Supabase auth session, user, sign out |
 | `toastStore` | Toast notifications (success/error/warning/info, auto-dismiss) |
-| `notificationStore` | Realtime badge counts for Kitchen and Orders |
+| `themeStore` | Dark/light theme toggle with localStorage persistence |
 | `i18nStore` | English/Burmese localization with 80+ translation keys |
 
 ## Utilities

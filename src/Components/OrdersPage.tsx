@@ -1,16 +1,52 @@
 import { useState, useEffect } from 'react';
 import { useOrderStore } from '../stores/orderStore';
+import { useNotificationStore } from '../stores/notificationStore';
+import ReceiptSlip, { type ReceiptData } from './ReceiptSlip';
 
 const OrdersPage = () => {
   const { orders, loading, error, fetchOrders, updateOrder, deleteOrder } = useOrderStore();
-  
+  const { ordersCount } = useNotificationStore();
+
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [paymentOrderId, setPaymentOrderId] = useState<number | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
-  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+  useEffect(() => { fetchOrders(); }, [fetchOrders, ordersCount]);
 
   const filteredOrders = filterStatus ? orders.filter(o => o.status === filterStatus) : orders;
+
+  const handlePayAndComplete = (orderId: number) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    // Generate receipt data
+    const receipt = {
+      orderNumber: order.order_number || `ORD-${orderId}`,
+      items: (order.items || []).map(item => ({
+        name: item.product_name,
+        qty: item.quantity,
+        price: item.unit_price,
+        subtotal: item.subtotal,
+      })),
+      subtotal: order.total / 1.1, // Reverse 10% tax
+      tax: order.total - (order.total / 1.1),
+      total: order.total,
+      paymentMethod: selectedPaymentMethod,
+      tableNumber: order.table_number || undefined,
+      orderType: order.order_type,
+      timestamp: new Date().toLocaleString(),
+    };
+
+    setReceiptData(receipt);
+    setShowReceipt(true);
+    setPaymentOrderId(null);
+    setSelectedPaymentMethod('');
+    updateOrder(orderId, { status: 'completed' });
+  };
 
   const statusColors: Record<string, string> = {
     pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500',
@@ -108,7 +144,7 @@ const OrdersPage = () => {
                     <button onClick={() => updateOrder(order.id!, { status: 'served' })} className="bg-green-500 text-black px-4 py-2 rounded-lg font-bold hover:bg-green-400">🍽 Mark Served</button>
                   )}
                   {order.status === 'served' && (
-                    <button onClick={() => updateOrder(order.id!, { status: 'completed' })} className="bg-gray-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-gray-400">🏁 Complete Order</button>
+                    <button onClick={() => setPaymentOrderId(order.id!)} className="bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold hover:bg-yellow-400">💰 Pay & Complete</button>
                   )}
                   <button onClick={() => setConfirmDeleteId(order.id!)} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-500">🗑 Delete</button>
                 </div>
@@ -131,6 +167,51 @@ const OrdersPage = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* PAYMENT MODAL */}
+      {paymentOrderId && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#272a30] rounded-xl border border-yellow-600 p-6 w-96">
+            <h2 className="text-white font-bold text-xl mb-4">💰 Payment</h2>
+            <p className="text-gray-400 mb-4">Select payment method:</p>
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <button
+                onClick={() => setSelectedPaymentMethod('card')}
+                className={`p-4 rounded-lg font-bold text-center transition ${selectedPaymentMethod === 'card' ? 'bg-blue-500 text-white' : 'bg-[#1e2128] text-gray-300 hover:bg-[#2f333a]'}`}
+              >
+                💳<br />Card
+              </button>
+              <button
+                onClick={() => setSelectedPaymentMethod('cash')}
+                className={`p-4 rounded-lg font-bold text-center transition ${selectedPaymentMethod === 'cash' ? 'bg-green-500 text-white' : 'bg-[#1e2128] text-gray-300 hover:bg-[#2f333a]'}`}
+              >
+                💵<br />Cash
+              </button>
+              <button
+                onClick={() => setSelectedPaymentMethod('qr')}
+                className={`p-4 rounded-lg font-bold text-center transition ${selectedPaymentMethod === 'qr' ? 'bg-purple-500 text-white' : 'bg-[#1e2128] text-gray-300 hover:bg-[#2f333a]'}`}
+              >
+                📱<br />QR
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handlePayAndComplete(paymentOrderId)}
+                disabled={!selectedPaymentMethod}
+                className={`flex-1 py-2 rounded-lg font-bold ${selectedPaymentMethod ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+              >
+                Complete Payment
+              </button>
+              <button onClick={() => { setPaymentOrderId(null); setSelectedPaymentMethod(''); }} className="flex-1 bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-500">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RECEIPT SLIP */}
+      {showReceipt && receiptData && (
+        <ReceiptSlip receipt={receiptData} onClose={() => { setShowReceipt(false); setReceiptData(null); }} />
       )}
     </div>
   );

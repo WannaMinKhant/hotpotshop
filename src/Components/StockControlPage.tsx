@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useProductStore } from '../stores/productsStore';
+import { useCategoryStore } from '../stores/categoryStore';
 import { useStockMovementStore } from '../stores/stockMovementStore';
 import { useToastStore } from '../stores/toastStore';
 import EmojiPicker from '../Components/EmojiPicker';
-import type { Product, ProductCategory, StockMovement } from '../types';
+import type { Product, StockMovement } from '../types';
 import { convertUnit, areUnitsCompatible } from '../lib/unit-conversion';
 
-const categoryList: (ProductCategory | 'all')[] = ['all', 'bases', 'meats', 'seafood', 'veggies', 'noodles', 'drinks', 'sauces'];
 const movementTypes: { value: StockMovement['movement_type']; label: string; icon: string; color: string }[] = [
   { value: 'purchase', label: 'Purchase In', icon: '📥', color: 'bg-green-500' },
   { value: 'sale', label: 'Sale Out', icon: '📤', color: 'bg-blue-500' },
@@ -17,6 +17,7 @@ const movementTypes: { value: StockMovement['movement_type']; label: string; ico
 
 const StockControlPage = () => {
   const { products, loading, error, fetchProducts, addProduct, updateProduct, deleteProduct } = useProductStore();
+  const { categories, fetchCategories } = useCategoryStore();
   const { movements, fetchMovements } = useStockMovementStore();
   const addToast = useToastStore((s) => s.addToast);
 
@@ -33,19 +34,32 @@ const StockControlPage = () => {
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
 
   const [formData, setFormData] = useState({
-    name: '', category: 'bases' as ProductCategory, stock_quantity: 0, unit: 'pcs',
+    name: '', category: 'bases', stock_quantity: 0, unit: 'pcs',
     base_unit: '', conversion_factor: 1, reorder_point: 10, price: 0, cost_price: 0, emoji: '',
   });
   const [purchaseData, setPurchaseData] = useState({
     quantity: 0, unit: 'pcs', cost_per_unit: 0, notes: '',
   });
 
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => { fetchProducts(); fetchCategories(); }, [fetchProducts, fetchCategories]);
+
+  // Build dynamic category tabs
+  const categoryTabs = [
+    { id: 'all', name: 'All' },
+    ...categories
+      .filter(c => c.is_active && !c.parent_id)
+      .map(c => ({
+        id: c.name.toLowerCase().replace(/\s+/g, '_'),
+        name: c.name,
+      })),
+  ];
+
   useEffect(() => { if (selectedProductId) fetchMovements(selectedProductId); }, [selectedProductId, fetchMovements]);
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
-    const matchesTab = activeTab === 'all' || p.category === activeTab;
+    const productCatId = p.category.toLowerCase().replace(/\s+/g, '_');
+    const matchesTab = activeTab === 'all' || productCatId === activeTab;
     return matchesSearch && matchesTab;
   });
 
@@ -57,7 +71,7 @@ const StockControlPage = () => {
 
   const handleAdd = async () => {
     if (!formData.name) { addToast('Product name is required', 'warning'); return; }
-    await addProduct(formData);
+    await addProduct({ ...formData, category: formData.category } as Omit<Product, 'id'>);
     setShowAddModal(false);
     setFormData({ name: '', category: 'bases', stock_quantity: 0, unit: 'pcs', base_unit: '', conversion_factor: 1, reorder_point: 10, price: 0, cost_price: 0, emoji: '' });
     addToast('Product added!', 'success');
@@ -173,9 +187,9 @@ const StockControlPage = () => {
           <input type="text" placeholder="🔍 Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full px-4 py-3 rounded-lg bg-[#272a30] border border-gray-600 text-white outline-none" />
         </div>
         <div className="flex gap-2 overflow-x-auto">
-          {categoryList.map(cat => (
-            <button key={cat} onClick={() => setActiveTab(cat)} className={`px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap ${activeTab === cat ? 'bg-yellow-500 text-black ring-2 ring-yellow-500' : 'bg-[#272a30] text-gray-300 hover:bg-[#2f333a]'}`}>
-              {cat === 'all' ? 'All' : cat.charAt(0).toUpperCase() + cat.slice(1)}
+          {categoryTabs.map(cat => (
+            <button key={cat.id} onClick={() => setActiveTab(cat.id)} className={`px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap ${activeTab === cat.id ? 'bg-yellow-500 text-black ring-2 ring-yellow-500' : 'bg-[#272a30] text-gray-300 hover:bg-[#2f333a]'}`}>
+              {cat.name}
             </button>
           ))}
         </div>
@@ -260,14 +274,21 @@ const StockControlPage = () => {
             )}
 
             <div className="space-y-3">
-              <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value as ProductCategory})} className="w-full px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white">
-                <option value="bases">🍲 Bases</option>
-                <option value="meats">🥩 Meats</option>
-                <option value="seafood">🦐 Seafood</option>
-                <option value="veggies">🥬 Vegetables</option>
-                <option value="noodles">🍜 Noodles</option>
-                <option value="drinks">🍹 Drinks</option>
-                <option value="sauces">🧂 Sauces</option>
+              <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white">
+                {categories.filter(c => c.is_active && !c.parent_id).map(c => (
+                  <option key={c.name.toLowerCase().replace(/\s+/g, '_')} value={c.name.toLowerCase().replace(/\s+/g, '_')}>{c.emoji || '📁'} {c.name}</option>
+                ))}
+                {categories.filter(c => c.is_active && !c.parent_id).length === 0 && (
+                  <>
+                    <option value="bases">🍲 Bases</option>
+                    <option value="meats">🥩 Meats</option>
+                    <option value="seafood">🦐 Seafood</option>
+                    <option value="veggies">🥬 Vegetables</option>
+                    <option value="noodles">🍜 Noodles</option>
+                    <option value="drinks">🍹 Drinks</option>
+                    <option value="sauces">🧂 Sauces</option>
+                  </>
+                )}
               </select>
 
               {/* Unit + Conversion */}

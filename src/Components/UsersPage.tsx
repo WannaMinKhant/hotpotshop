@@ -12,29 +12,57 @@ const roleLabels: Record<UserRole, string> = {
   cleaner: '🧹 Cleaner',
 };
 
+const roleColors: Record<UserRole, string> = {
+  admin: 'text-yellow-400 bg-yellow-500/20 border-yellow-500',
+  manager: 'text-purple-400 bg-purple-500/20 border-purple-500',
+  cashier: 'text-green-400 bg-green-500/20 border-green-500',
+  chef: 'text-orange-400 bg-orange-500/20 border-orange-500',
+  waiter: 'text-blue-400 bg-blue-500/20 border-blue-500',
+  cleaner: 'text-gray-400 bg-gray-500/20 border-gray-500',
+};
+
 const roles: UserRole[] = ['admin', 'manager', 'cashier', 'chef', 'waiter', 'cleaner'];
 
 const UsersPage = () => {
-  const { profiles, loading, fetchProfiles, createAccount, updateProfile, deleteAccount } = useUserManagementStore();
+  const { profiles, loading, error, fetchProfiles, createAccount, updateProfile, deleteAccount, resetPassword, toggleActive, syncMissingProfiles } = useUserManagementStore();
   const addToast = useToastStore((s) => s.addToast);
 
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<{ id: string; name: string; phone?: string } | null>(null);
+  const [editingUser, setEditingUser] = useState<{ id: string; name: string; phone?: string; role: UserRole } | null>(null);
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [formData, setFormData] = useState({
     email: '', password: '', name: '', role: 'cashier' as UserRole, phone: '',
   });
 
+  const [editFormData, setEditFormData] = useState({ name: '', phone: '', role: '' as UserRole });
+
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
+
+  const handleSync = async () => {
+    const count = await syncMissingProfiles();
+    if (count > 0) {
+      addToast(`Synced ${count} missing profile${count > 1 ? 's' : ''}`, 'success');
+    } else if (count === 0) {
+      addToast('No missing profiles found', 'info');
+    }
+  };
+
+  const filteredProfiles = profiles.filter(p =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.phone && p.phone.includes(searchQuery))
+  );
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
     if (!formData.name.trim()) errors.name = 'Name is required';
     if (!formData.email.trim()) errors.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errors.email = 'Invalid email';
-    if (!editingUser && (!formData.password || formData.password.length < 6)) errors.password = 'Password must be at least 6 characters';
+    if (!formData.password || formData.password.length < 6) errors.password = 'Password must be at least 6 characters';
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -48,32 +76,36 @@ const UsersPage = () => {
       setFormData({ email: '', password: '', name: '', role: 'cashier', phone: '' });
       setFormErrors({});
       addToast(`Account created for ${formData.name}`, 'success');
-    } else {
-      addToast('Failed to create account', 'error');
     }
+  };
+
+  const openEditModal = (user: typeof profiles[0]) => {
+    setEditingUser({ id: user.id, name: user.name, phone: user.phone, role: user.role });
+    setEditFormData({ name: user.name, phone: user.phone || '', role: user.role });
   };
 
   const handleEditSave = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
-    const form = e.target as HTMLFormElement;
-    const fd = new FormData(form);
     const ok = await updateProfile(editingUser.id, {
-      name: fd.get('name') as string,
-      phone: (fd.get('phone') as string) || undefined,
+      name: editFormData.name,
+      phone: editFormData.phone || undefined,
+      role: editFormData.role,
     });
     if (ok) {
       setEditingUser(null);
       addToast('Profile updated', 'success');
-    } else {
-      addToast('Failed to update', 'error');
     }
   };
 
   const handleRoleChange = async (id: string, newRole: UserRole) => {
     const ok = await updateProfile(id, { role: newRole });
     if (ok) addToast('Role changed', 'success');
-    else addToast('Failed to change role', 'error');
+  };
+
+  const handleToggleActive = async (id: string, currentStatus: boolean) => {
+    const ok = await toggleActive(id, currentStatus);
+    if (ok) addToast(`Account ${currentStatus ? 'deactivated' : 'activated'}`, 'info');
   };
 
   const handleDelete = async (id: string) => {
@@ -81,22 +113,67 @@ const UsersPage = () => {
     if (ok) {
       setConfirmDelete(null);
       addToast('Account deleted', 'info');
-    } else {
-      addToast('Failed to delete', 'error');
+    }
+  };
+
+  const handleResetPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!resettingUserId) return;
+    const form = e.target as HTMLFormElement;
+    const fd = new FormData(form);
+    const newPassword = fd.get('newPassword') as string;
+    const confirmPassword = fd.get('confirmPassword') as string;
+
+    if (newPassword !== confirmPassword) {
+      addToast('Passwords do not match', 'error');
+      return;
+    }
+    if (newPassword.length < 6) {
+      addToast('Password must be at least 6 characters', 'error');
+      return;
+    }
+
+    const user = profiles.find(p => p.id === resettingUserId);
+    if (!user) return;
+
+    const ok = await resetPassword(resettingUserId, newPassword);
+    if (ok) {
+      setResettingUserId(null);
+      addToast('Password reset successfully', 'success');
     }
   };
 
   return (
     <div className="p-6 bg-[#1e2128] h-screen overflow-y-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
         <div>
           <h1 className="text-3xl font-bold text-white">👤 User Accounts</h1>
           <p className="text-gray-400 mt-1">Create and manage staff login accounts</p>
         </div>
-        <button onClick={() => { setFormErrors({}); setFormData({ email: '', password: '', name: '', role: 'cashier', phone: '' }); setShowAddModal(true); }} className="bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-lg font-bold">
-          + Create Account
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleSync}
+            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold"
+          >
+            🔄 Sync Missing
+          </button>
+          <button
+            onClick={() => { setFormErrors({}); setFormData({ email: '', password: '', name: '', role: 'cashier', phone: '' }); setShowAddModal(true); }}
+            className="bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-lg font-bold"
+          >
+            + Create Account
+          </button>
+        </div>
       </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-500/20 border border-red-500 rounded-lg text-red-400">
+          <p className="font-bold">⚠️ Error: {error}</p>
+          <button onClick={() => fetchProfiles()} className="mt-2 text-sm underline">Retry</button>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -118,11 +195,22 @@ const UsersPage = () => {
         </div>
       </div>
 
+      {/* Search */}
+      <div className="mb-4">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="🔍 Search by name, email, or phone..."
+          className="w-full px-4 py-2 rounded-lg bg-[#272a30] border border-gray-600 text-white placeholder-gray-500"
+        />
+      </div>
+
       {/* Table */}
       {loading ? (
         <div className="text-center text-gray-400 py-12">Loading users...</div>
-      ) : profiles.length === 0 ? (
-        <div className="text-center text-gray-400 py-12">No user accounts yet. Create the first one!</div>
+      ) : filteredProfiles.length === 0 ? (
+        <div className="text-center text-gray-400 py-12">{searchQuery ? 'No users match your search' : 'No user accounts yet. Create the first one!'}</div>
       ) : (
         <div className="bg-[#272a30] rounded-xl border border-gray-700 overflow-hidden">
           <table className="w-full">
@@ -138,7 +226,7 @@ const UsersPage = () => {
               </tr>
             </thead>
             <tbody>
-              {profiles.map(profile => (
+              {filteredProfiles.map(profile => (
                 <tr key={profile.id} className="border-b border-gray-800 hover:bg-[#2f333a] transition">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
@@ -152,21 +240,24 @@ const UsersPage = () => {
                     <select
                       value={profile.role}
                       onChange={(e) => handleRoleChange(profile.id, e.target.value as UserRole)}
-                      className="px-2 py-1 rounded text-sm font-semibold bg-opacity-20 border border-current"
-                      style={{ borderColor: 'currentColor' }}
+                      className={`px-2 py-1 rounded text-xs font-bold border ${roleColors[profile.role]}`}
                     >
-                      {roles.map(r => (<option key={r} value={r} className="text-white bg-[#1e2128]">{roleLabels[r]}</option>))}
+                      {roles.map(r => (<option key={r} value={r}>{roleLabels[r]}</option>))}
                     </select>
                   </td>
                   <td className="p-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${profile.is_active ? 'bg-green-500/20 text-green-400 border border-green-500' : 'bg-red-500/20 text-red-400 border border-red-500'}`}>
-                      {profile.is_active ? 'Active' : 'Inactive'}
-                    </span>
+                    <button
+                      onClick={() => handleToggleActive(profile.id, profile.is_active)}
+                      className={`px-3 py-1 rounded-full text-xs font-bold cursor-pointer transition ${profile.is_active ? 'bg-green-500/20 text-green-400 border border-green-500 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500' : 'bg-red-500/20 text-red-400 border border-red-500 hover:bg-green-500/20 hover:text-green-400 hover:border-green-500'}`}
+                    >
+                      {profile.is_active ? '✓ Active' : '✗ Inactive'}
+                    </button>
                   </td>
                   <td className="p-4 text-gray-500 text-sm">{profile.created_at ? new Date(profile.created_at).toLocaleDateString() : '—'}</td>
                   <td className="p-4 space-x-1">
-                    <button onClick={() => setEditingUser({ id: profile.id, name: profile.name, phone: profile.phone })} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-xs font-semibold">Edit</button>
-                    <button onClick={() => setConfirmDelete(profile.id)} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-xs font-semibold">Delete</button>
+                    <button onClick={() => openEditModal(profile)} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-xs font-semibold">✏️ Edit</button>
+                    <button onClick={() => setResettingUserId(profile.id)} className="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded text-xs font-semibold">🔑 Reset</button>
+                    <button onClick={() => setConfirmDelete(profile.id)} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-xs font-semibold">🗑 Delete</button>
                   </td>
                 </tr>
               ))}
@@ -182,28 +273,33 @@ const UsersPage = () => {
             <h2 className="text-xl font-bold text-white mb-4">➕ Create Account</h2>
             <form onSubmit={handleAdd} className="space-y-3">
               <div>
-                <input name="name" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="Full Name *" />
+                <label className="text-gray-400 text-xs">Full Name</label>
+                <input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="John Doe" />
                 {formErrors.name && <p className="text-red-400 text-sm mt-1">{formErrors.name}</p>}
               </div>
               <div>
-                <input name="email" type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="Email (e.g., admin@b2m.com) *" />
+                <label className="text-gray-400 text-xs">Email</label>
+                <input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="admin@b2m.com" />
                 {formErrors.email && <p className="text-red-400 text-sm mt-1">{formErrors.email}</p>}
               </div>
               <div>
-                <input name="password" type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="Password (min 6 chars) *" />
+                <label className="text-gray-400 text-xs">Password (min 6 chars)</label>
+                <input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="••••••" />
                 {formErrors.password && <p className="text-red-400 text-sm mt-1">{formErrors.password}</p>}
               </div>
               <div>
-                <select value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})} className="w-full px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white">
+                <label className="text-gray-400 text-xs">Role</label>
+                <select value={formData.role} onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})} className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white">
                   {roles.map(r => (<option key={r} value={r}>{roleLabels[r]}</option>))}
                 </select>
               </div>
               <div>
-                <input name="phone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="Phone (optional)" />
+                <label className="text-gray-400 text-xs">Phone (optional)</label>
+                <input value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="09-xxx-xxx-xxx" />
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="submit" className="flex-1 bg-green-500 hover:bg-green-400 text-black py-3 rounded-lg font-bold">Create Account</button>
-                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-3 rounded-lg font-bold">Cancel</button>
+                <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-3 rounded-lg">Cancel</button>
               </div>
             </form>
           </div>
@@ -218,15 +314,44 @@ const UsersPage = () => {
             <form onSubmit={handleEditSave} className="space-y-3">
               <div>
                 <label className="text-gray-400 text-xs">Name</label>
-                <input name="name" defaultValue={editingUser.name} className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" />
+                <input value={editFormData.name} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" />
               </div>
               <div>
                 <label className="text-gray-400 text-xs">Phone</label>
-                <input name="phone" defaultValue={editingUser.phone || ''} className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="Optional" />
+                <input value={editFormData.phone} onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})} className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="Optional" />
+              </div>
+              <div>
+                <label className="text-gray-400 text-xs">Role</label>
+                <select value={editFormData.role} onChange={(e) => setEditFormData({...editFormData, role: e.target.value as UserRole})} className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white">
+                  {roles.map(r => (<option key={r} value={r}>{roleLabels[r]}</option>))}
+                </select>
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="submit" className="flex-1 bg-green-500 hover:bg-green-400 text-black py-3 rounded-lg font-bold">Save</button>
-                <button type="button" onClick={() => setEditingUser(null)} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-3 rounded-lg font-bold">Cancel</button>
+                <button type="submit" className="flex-1 bg-green-500 hover:bg-green-400 text-black py-3 rounded-lg font-bold">Save Changes</button>
+                <button type="button" onClick={() => setEditingUser(null)} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-3 rounded-lg">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RESET PASSWORD MODAL */}
+      {resettingUserId && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#272a30] rounded-xl border border-purple-600 p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-white mb-4">🔑 Reset Password</h2>
+            <form onSubmit={handleResetPassword} className="space-y-3">
+              <div>
+                <label className="text-gray-400 text-xs">New Password</label>
+                <input name="newPassword" type="password" className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="Min 6 characters" />
+              </div>
+              <div>
+                <label className="text-gray-400 text-xs">Confirm Password</label>
+                <input name="confirmPassword" type="password" className="w-full mt-1 px-3 py-2 rounded bg-[#1e2128] border border-gray-600 text-white" placeholder="Re-enter password" />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" className="flex-1 bg-purple-500 hover:bg-purple-400 text-white py-3 rounded-lg font-bold">Reset Password</button>
+                <button type="button" onClick={() => setResettingUserId(null)} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-3 rounded-lg">Cancel</button>
               </div>
             </form>
           </div>
@@ -239,7 +364,7 @@ const UsersPage = () => {
           <div className="bg-[#272a30] rounded-xl border border-red-600 p-6 w-80 text-center">
             <p className="text-4xl mb-3">⚠️</p>
             <p className="text-white font-bold text-lg mb-2">Delete Account?</p>
-            <p className="text-gray-400 text-sm mb-4">This will permanently remove the user's login access.</p>
+            <p className="text-gray-400 text-sm mb-4">This will permanently remove the user's login access and profile.</p>
             <div className="flex gap-2">
               <button onClick={() => handleDelete(confirmDelete)} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-bold hover:bg-red-500">Delete</button>
               <button onClick={() => setConfirmDelete(null)} className="flex-1 bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-500">Cancel</button>

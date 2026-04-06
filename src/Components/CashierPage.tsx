@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useProductStore } from '../stores/productsStore';
+import { useTableStore } from '../stores/tableStore';
+import { useCategoryStore } from '../stores/categoryStore';
 import { useOrderStore } from '../stores/orderStore';
 import { useToastStore } from '../stores/toastStore';
-import type { Product, ProductCategory } from '../types';
+import type { Product } from '../types';
 
 interface CartItem {
   id: number;
@@ -12,31 +14,47 @@ interface CartItem {
   emoji: string;
 }
 
-const categoryList: { id: ProductCategory | 'all'; name: string; emoji: string }[] = [
-  { id: 'all', name: 'All', emoji: '📋' },
-  { id: 'bases', name: 'Hotpot Bases', emoji: '🍲' },
-  { id: 'meats', name: 'Meats', emoji: '🥩' },
-  { id: 'seafood', name: 'Seafood', emoji: '🦐' },
-  { id: 'veggies', name: 'Vegetables', emoji: '🥬' },
-  { id: 'noodles', name: 'Noodles & Rice', emoji: '🍜' },
-  { id: 'drinks', name: 'Drinks', emoji: '🍹' },
-  { id: 'sauces', name: 'Sauces', emoji: '🧂' },
-];
-
 const CashierPage = () => {
   const { products, fetchProducts } = useProductStore();
+  const { tables, fetchTables } = useTableStore();
+  const { categories, fetchCategories } = useCategoryStore();
   const { addOrder } = useOrderStore();
   const addToast = useToastStore((s) => s.addToast);
 
-  const [activeCategory, setActiveCategory] = useState<ProductCategory | 'all'>('all');
+  // Build dynamic category list from admin
+  const dynamicCategories = [
+    { id: 'all' as string, name: 'All', emoji: '📋' },
+    ...categories
+      .filter(c => c.is_active && !c.parent_id)
+      .map(c => ({
+        id: c.name.toLowerCase().replace(/\s+/g, '_'),
+        name: c.name,
+        emoji: c.emoji || '📁',
+        originalName: c.name,
+      })),
+  ];
+
+  const [activeCategory, setActiveCategory] = useState<string>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [selectedTable, setSelectedTable] = useState(5);
+  const [selectedTable, setSelectedTable] = useState(1);
   const [orderType, setOrderType] = useState<string>('dine-in');
   const [showPayment, setShowPayment] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => {
+    fetchProducts();
+    fetchTables();
+    fetchCategories();
+  }, [fetchProducts, fetchTables, fetchCategories]);
+
+  // Set default table on load
+  useEffect(() => {
+    if (tables.length > 0 && selectedTable === 1) {
+      const activeTable = tables.find(t => t.is_active);
+      if (activeTable) setSelectedTable(activeTable.table_number);
+    }
+  }, [tables, selectedTable]);
 
   const filteredProducts = products.filter(p => {
     const matchesCategory = activeCategory === 'all' || p.category === activeCategory;
@@ -145,9 +163,12 @@ const CashierPage = () => {
                 onChange={e => setSelectedTable(Number(e.target.value))}
                 className="bg-[#272a30] border border-gray-600 rounded-lg px-3 py-2 text-white"
               >
-                {Array.from({ length: 15 }, (_, i) => (
-                  <option key={i + 1} value={i + 1}>Table {i + 1}</option>
+                {tables.filter(t => t.is_active).map(t => (
+                  <option key={t.id} value={t.table_number}>Table {t.table_number} ({t.seats} seats)</option>
                 ))}
+                {tables.filter(t => t.is_active).length === 0 && (
+                  <option value={1}>Table 1</option>
+                )}
               </select>
             )}
           </div>
@@ -164,7 +185,7 @@ const CashierPage = () => {
 
         {/* Categories */}
         <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-          {categoryList.map(cat => (
+          {dynamicCategories.map(cat => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}

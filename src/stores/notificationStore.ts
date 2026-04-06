@@ -1,68 +1,80 @@
-// Realtime notification badge counts
+// Real-time notification store for Kitchen and Orders badges
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface NotificationState {
-  pendingOrders: number;     // For Kitchen badge
-  preparingOrders: number;   // For Kitchen badge
-  readyOrders: number;       // For Kitchen badge
-  servedOrders: number;      // For Kitchen badge
-  pendingKitchenCount: number; // Kitchen: pending + preparing
-  servedReadyCount: number;    // Kitchen: ready orders waiting
-  newOrderCount: number;       // Orders: new/pending orders
-
-  subscribe: () => void;
+  kitchenCount: number;
+  ordersCount: number;
+  loading: boolean;
+  _channel: RealtimeChannel | null;
+  
+  fetchCounts: () => Promise<void>;
+  subscribeToOrders: () => void;
   unsubscribe: () => void;
 }
 
-export const useNotificationStore = create<NotificationState>((set) => ({
-  pendingOrders: 0,
-  preparingOrders: 0,
-  readyOrders: 0,
-  servedOrders: 0,
-  pendingKitchenCount: 0,
-  servedReadyCount: 0,
-  newOrderCount: 0,
+export const useNotificationStore = create<NotificationState>((set, get) => ({
+  kitchenCount: 0,
+  ordersCount: 0,
+  loading: false,
+  _channel: null,
 
-  subscribe: () => {
-    const updateCounts = async () => {
-      const { data } = await supabase
+  fetchCounts: async () => {
+    set({ loading: true });
+    try {
+      // Count kitchen orders (pending + preparing + ready)
+      const { count: kitchenCount } = await supabase
         .from('orders')
-        .select('status');
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['pending', 'preparing', 'ready']);
 
-      if (data) {
-        const pending = data.filter(o => o.status === 'pending').length;
-        const preparing = data.filter(o => o.status === 'preparing').length;
-        const ready = data.filter(o => o.status === 'ready').length;
-        const served = data.filter(o => o.status === 'served').length;
+      // Count non-completed orders for Orders page
+      const { count: ordersCount } = await supabase
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .not('status', 'in', '(completed,cancelled)');
 
-        set({
-          pendingOrders: pending,
-          preparingOrders: preparing,
-          readyOrders: ready,
-          servedOrders: served,
-          pendingKitchenCount: pending + preparing,
-          servedReadyCount: ready + served,
-          newOrderCount: pending,
-        });
-      }
-    };
+      set({
+        kitchenCount: kitchenCount || 0,
+        ordersCount: ordersCount || 0,
+        loading: false,
+      });
+    } catch (e) {
+      console.error('[notificationStore] Failed to fetch counts:', e);
+      set({ loading: false });
+    }
+  },
 
-    updateCounts();
+  subscribeToOrders: () => {
+    // Unsubscribe existing
+    get().unsubscribe();
 
     const channel = supabase
-      .channel('notification-badges')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        updateCounts();
-      })
+      .channel('orders-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+        },
+        async () => {
+          console.log('[notificationStore] Orders change detected');
+          // Refresh counts on any order change
+          await get().fetchCounts();
+        }
+      )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    set({ _channel: channel });
   },
 
   unsubscribe: () => {
-    supabase.removeChannel(supabase.channel('notification-badges'));
+    const channel = get()._channel;
+    if (channel) {
+      supabase.removeChannel(channel);
+      set({ _channel: null });
+    }
   },
 }));
