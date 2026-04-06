@@ -62,7 +62,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signOut: async () => {
+    localStorage.removeItem(ROLE_KEY);
     await supabase.auth.signOut();
-    set({ user: null, loading: false });
+    set({ user: null, role: DEFAULT_ROLE, loading: false });
   },
 }));

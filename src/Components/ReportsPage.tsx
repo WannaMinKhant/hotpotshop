@@ -145,7 +145,7 @@ const ReportsPage = () => {
   const periodKeys: ('today' | 'week' | 'month')[] = ['today', 'week', 'month'];
 
   return (
-    <div className="p-6 bg-[#1e2128] h-screen overflow-y-auto">
+    <div className="p-6 bg-[#1e2128] min-h-full overflow-y-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>

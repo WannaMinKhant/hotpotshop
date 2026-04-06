@@ -115,7 +115,7 @@ const RecipesPage = () => {
   const availableProducts = products.filter(p => !ingredients.find(ing => ing.product_id === p.id));
 
   return (
-    <div className="p-6 bg-[#1e2128] h-screen overflow-y-auto">
+    <div className="p-6 bg-[#1e2128] min-h-full overflow-y-auto">
       {error && <div className="mb-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400">{error}</div>}
 
       {/* Header */}

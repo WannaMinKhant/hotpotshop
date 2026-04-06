@@ -85,7 +85,7 @@ const StaffPage = () => {
   };
 
   return (
-    <div className="p-6 bg-[#1e2128] h-screen overflow-y-auto">
+    <div className="p-6 bg-[#1e2128] min-h-full overflow-y-auto">
       {error && <div className="mb-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400">{error}</div>}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h1 className="text-3xl font-bold text-white">🧑‍💼 Staff Management</h1>

@@ -24,7 +24,7 @@ const roleColors: Record<UserRole, string> = {
 const roles: UserRole[] = ['admin', 'manager', 'cashier', 'chef', 'waiter', 'cleaner'];
 
 const UsersPage = () => {
-  const { profiles, loading, error, fetchProfiles, createAccount, updateProfile, deleteAccount, resetPassword, toggleActive, syncMissingProfiles } = useUserManagementStore();
+  const { profiles, loading, error, fetchProfiles, createAccount, updateProfile, deleteAccount, resetPassword, toggleActive } = useUserManagementStore();
   const addToast = useToastStore((s) => s.addToast);
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -41,15 +41,6 @@ const UsersPage = () => {
   const [editFormData, setEditFormData] = useState({ name: '', phone: '', role: '' as UserRole });
 
   useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
-
-  const handleSync = async () => {
-    const count = await syncMissingProfiles();
-    if (count > 0) {
-      addToast(`Synced ${count} missing profile${count > 1 ? 's' : ''}`, 'success');
-    } else if (count === 0) {
-      addToast('No missing profiles found', 'info');
-    }
-  };
 
   const filteredProfiles = profiles.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -144,27 +135,19 @@ const UsersPage = () => {
   };
 
   return (
-    <div className="p-6 bg-[#1e2128] h-screen overflow-y-auto">
+    <div className="p-6 bg-[#1e2128] min-h-full overflow-y-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
         <div>
           <h1 className="text-3xl font-bold text-white">👤 User Accounts</h1>
           <p className="text-gray-400 mt-1">Create and manage staff login accounts</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleSync}
-            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold"
-          >
-            🔄 Sync Missing
-          </button>
-          <button
-            onClick={() => { setFormErrors({}); setFormData({ email: '', password: '', name: '', role: 'cashier', phone: '' }); setShowAddModal(true); }}
-            className="bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-lg font-bold"
-          >
-            + Create Account
-          </button>
-        </div>
+        <button
+          onClick={() => { setFormErrors({}); setFormData({ email: '', password: '', name: '', role: 'cashier', phone: '' }); setShowAddModal(true); }}
+          className="bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-lg font-bold"
+        >
+          + Create Account
+        </button>
       </div>
 
       {/* Error Display */}

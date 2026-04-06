@@ -10,7 +10,8 @@
       "Bash(ren *)",
       "Bash(git checkout *)",
       "Bash(npx *)",
-      "Bash(findstr *)"
+      "Bash(findstr *)",
+      "Bash(@python *)"
     ]
   },
   "$version": 3

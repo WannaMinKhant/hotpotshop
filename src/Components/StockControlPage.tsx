@@ -22,6 +22,7 @@ const StockControlPage = () => {
   const addToast = useToastStore((s) => s.addToast);
 
   const [activeTab, setActiveTab] = useState<string>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'ok'>('all');
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -60,7 +61,12 @@ const StockControlPage = () => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
     const productCatId = p.category.toLowerCase().replace(/\s+/g, '_');
     const matchesTab = activeTab === 'all' || productCatId === activeTab;
-    return matchesSearch && matchesTab;
+    const matchesStock = stockFilter === 'all'
+      ? true
+      : stockFilter === 'low'
+        ? p.stock_quantity <= p.reorder_point
+        : p.stock_quantity > p.reorder_point;
+    return matchesSearch && matchesTab && matchesStock;
   });
 
   const lowStockItems = products.filter(p => p.stock_quantity <= p.reorder_point);
@@ -149,7 +155,7 @@ const StockControlPage = () => {
   };
 
   return (
-    <div className="p-6 bg-[#1e2128] h-screen overflow-y-auto">
+    <div className="p-6 bg-[#1e2128] min-h-full overflow-y-auto">
       {error && <div className="mb-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400">{error}</div>}
 
       {/* Header */}
@@ -163,23 +169,51 @@ const StockControlPage = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-green-500/20 border border-green-500 rounded-xl p-4">
+        <button
+          onClick={() => setStockFilter('all')}
+          className={`bg-green-500/20 border rounded-xl p-4 transition-all text-left cursor-pointer hover:brightness-125 ${stockFilter === 'all' ? 'border-green-400 ring-2 ring-green-500/50' : 'border-green-500'}`}
+        >
           <p className="text-green-400 text-sm font-semibold">Total Products</p>
           <p className="text-3xl font-bold text-green-400">{loading ? '...' : products.length}</p>
-        </div>
-        <div className="bg-red-500/20 border border-red-500 rounded-xl p-4">
+          {stockFilter === 'all' && <p className="text-green-300 text-[10px] mt-1">✓ Showing all</p>}
+        </button>
+        <button
+          onClick={() => setStockFilter('low')}
+          className={`bg-red-500/20 border rounded-xl p-4 transition-all text-left cursor-pointer hover:brightness-125 ${stockFilter === 'low' ? 'border-red-400 ring-2 ring-red-500/50' : 'border-red-500'}`}
+        >
           <p className="text-red-400 text-sm font-semibold">Low Stock</p>
           <p className="text-3xl font-bold text-red-400">{lowStockItems.length}</p>
-        </div>
-        <div className="bg-yellow-500/20 border border-yellow-500 rounded-xl p-4">
+          {stockFilter === 'low' && <p className="text-red-300 text-[10px] mt-1">✓ Showing low stock</p>}
+        </button>
+        <button
+          onClick={() => setStockFilter('ok')}
+          className={`bg-yellow-500/20 border rounded-xl p-4 transition-all text-left cursor-pointer hover:brightness-125 ${stockFilter === 'ok' ? 'border-yellow-400 ring-2 ring-yellow-500/50' : 'border-yellow-500'}`}
+        >
           <p className="text-yellow-400 text-sm font-semibold">In Stock</p>
           <p className="text-3xl font-bold text-yellow-400">{products.length - lowStockItems.length}</p>
-        </div>
+          {stockFilter === 'ok' && <p className="text-yellow-300 text-[10px] mt-1">✓ Showing in stock</p>}
+        </button>
         <div className="bg-blue-500/20 border border-blue-500 rounded-xl p-4">
           <p className="text-blue-400 text-sm font-semibold">Inventory Value</p>
           <p className="text-3xl font-bold text-blue-400">${totalInventoryValue.toFixed(2)}</p>
         </div>
       </div>
+
+      {/* Active Filter Indicator */}
+      {stockFilter !== 'all' && (
+        <div className="mb-4 flex items-center gap-3 bg-[#272a30] rounded-lg p-3 border border-gray-700">
+          <span className={`text-sm font-semibold ${stockFilter === 'low' ? 'text-red-400' : 'text-yellow-400'}`}>
+            {stockFilter === 'low' ? '⚠️ Showing Low Stock Only' : '✅ Showing In Stock Only'}
+          </span>
+          <span className="text-gray-500 text-sm">({filteredProducts.length} of {products.length} products)</span>
+          <button
+            onClick={() => setStockFilter('all')}
+            className="ml-auto text-gray-400 hover:text-white text-sm underline"
+          >
+            Show All
+          </button>
+        </div>
+      )}
 
       {/* Search + Tabs */}
       <div className="flex flex-col md:flex-row gap-3 mb-6">

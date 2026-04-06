@@ -66,7 +66,7 @@ const AdminPage = () => {
   };
 
   return (
-    <div className="p-6 bg-[#1e2128] h-screen overflow-y-auto">
+    <div className="p-6 bg-[#1e2128] min-h-full overflow-y-auto">
       <h1 className="text-3xl font-bold text-white mb-6">⚙️ Admin Settings</h1>
 
       {/* Tables */}

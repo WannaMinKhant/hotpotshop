@@ -1,19 +1,65 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useOrderStore } from '../stores/orderStore';
 import { useProductStore } from '../stores/productsStore';
 import { useCustomerStore } from '../stores/customerStore';
+import { useTableStore } from '../stores/tableStore';
+import { useStaffStore } from '../stores/staffStore';
 import StatCard from '../Components/StatCard';
- 
+
+interface TableOrder {
+  tableNumber: number;
+  orders: {
+    order_number: string;
+    status: string;
+    total: number;
+    items: string;
+    time: string;
+  }[];
+}
+
 const DashboardHome = () => {
   const { orders, fetchOrders } = useOrderStore();
   const { products, fetchProducts } = useProductStore();
   const { customers, fetchCustomers } = useCustomerStore();
+  const { tables, fetchTables } = useTableStore();
+  const { staff, fetchStaff } = useStaffStore();
+
+  const [selectedTable, setSelectedTable] = useState<number | null>(null);
 
   useEffect(() => {
     fetchOrders();
     fetchProducts();
     fetchCustomers();
-  }, [fetchOrders, fetchProducts, fetchCustomers]);
+    fetchTables();
+    fetchStaff();
+  }, [fetchOrders, fetchProducts, fetchCustomers, fetchTables, fetchStaff]);
+
+  // Build table orders map from active orders
+  const tableOrders = useMemo(() => {
+    const active = orders.filter(o =>
+      ['pending', 'preparing', 'ready', 'served'].includes(o.status) && o.table_number
+    );
+
+    const map: Record<number, TableOrder> = {};
+    active.forEach(o => {
+      const tn = o.table_number!;
+      if (!map[tn]) {
+        map[tn] = {
+          tableNumber: tn,
+          orders: [],
+        };
+      }
+      map[tn].orders.push({
+        order_number: o.order_number || '',
+        status: o.status,
+        total: o.total || 0,
+        items: o.items?.map(i => `${i.product_name} ×${i.quantity}`).join(', ') || '',
+        time: o.created_at ? new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+      });
+    });
+
+    return Object.values(map).sort((a, b) => a.tableNumber - b.tableNumber);
+  }, [orders]);
 
   // Computed stats
   const todayOrders = orders.filter(o => {
@@ -77,15 +123,29 @@ const DashboardHome = () => {
     cancelled: 'bg-red-500/20 text-red-400',
   };
 
-  // Table count mock (we don't have tables in schema yet)
-  const totalTables = 15;
-  const occupiedTables = Math.min(activeOrders.filter(o => o.table_number).length, totalTables);
+  // Table status from real data
+  const activeTables = new Set(activeOrders.filter(o => o.table_number).map(o => o.table_number));
+  const occupiedTables = activeTables.size;
+  const totalTables = tables.length || 15;
 
   // Order type counts
   const dineInCount = orders.filter(o => o.order_type === 'dine-in').length;
   const takeoutCount = orders.filter(o => o.order_type === 'takeout').length;
   const deliveryCount = orders.filter(o => o.order_type === 'delivery').length;
   const cancelledCount = orders.filter(o => o.status === 'cancelled').length;
+
+  // Online staff (on-duty or break)
+  const onlineStaff = useMemo(() => {
+    return staff.filter(s => s.status === 'on-duty' || s.status === 'break');
+  }, [staff]);
+
+  const roleIcons: Record<string, string> = {
+    manager: '👔',
+    chef: '👨‍🍳',
+    waiter: '🤵',
+    cashier: '💰',
+    cleaner: '🧹',
+  };
 
   return (
     <div className="p-6 overflow-y-auto h-full">
@@ -186,20 +246,71 @@ const DashboardHome = () => {
             <h2 className="text-xl font-bold text-white">Table Status</h2>
             <span className="text-sm text-gray-400">{occupiedTables} of {totalTables} occupied</span>
           </div>
+
+          {/* Tables Grid */}
           <div className="p-5 grid grid-cols-5 gap-3">
-            {Array.from({ length: totalTables }, (_, i) => (
-              <div
-                key={i}
-                className={`aspect-square rounded-lg flex items-center justify-center font-bold text-sm ${
-                  i < occupiedTables
-                    ? 'bg-red-500/20 border-2 border-red-500 text-red-400'
-                    : 'bg-green-500/20 border-2 border-green-500 text-green-400'
-                }`}
-              >
-                T{i + 1}
-              </div>
-            ))}
+            {tables.length === 0 ? (
+              <div className="col-span-5 text-center text-gray-500 py-4">No tables configured</div>
+            ) : (
+              tables
+                .filter(t => t.is_active)
+                .sort((a, b) => a.table_number - b.table_number)
+                .map(table => {
+                  const isOccupied = activeTables.has(table.table_number);
+                  const orderCount = tableOrders.find(to => to.tableNumber === table.table_number)?.orders.length || 0;
+                  return (
+                    <button
+                      key={table.id}
+                      onClick={() => setSelectedTable(isOccupied ? table.table_number : null)}
+                      className={`aspect-square rounded-lg flex flex-col items-center justify-center font-bold text-sm transition-all cursor-pointer
+                        ${isOccupied
+                          ? 'bg-red-500/20 border-2 border-red-500 text-red-400 hover:bg-red-500/30 hover:scale-105'
+                          : 'bg-green-500/20 border-2 border-green-500 text-green-400'
+                        }`}
+                      title={isOccupied ? `Table ${table.table_number} — ${orderCount} order(s)` : `Table ${table.table_number} — Free`}
+                    >
+                      <span>T{table.table_number}</span>
+                      {isOccupied && <span className="text-[10px] font-normal">({orderCount})</span>}
+                    </button>
+                  );
+                })
+            )}
           </div>
+
+          {/* Table Orders Panel */}
+          {selectedTable !== null && (
+            <div className="p-5 border-t border-gray-700 bg-[#1f2329]">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-bold text-white">📋 Table {selectedTable} — Current Orders</h3>
+                <button onClick={() => setSelectedTable(null)} className="text-gray-400 hover:text-white text-sm">✕ Close</button>
+              </div>
+              {(() => {
+                const tableData = tableOrders.find(to => to.tableNumber === selectedTable);
+                if (!tableData || tableData.orders.length === 0) {
+                  return <p className="text-gray-500 text-sm">No active orders for this table</p>;
+                }
+                return (
+                  <div className="space-y-2">
+                    {tableData.orders.map((order, i) => (
+                      <div key={i} className="bg-[#272a30] rounded-lg p-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-yellow-400 font-bold text-sm">{order.order_number}</p>
+                          <p className="text-gray-400 text-xs truncate max-w-[200px]">{order.items}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusColors[order.status] || 'bg-gray-500/20 text-gray-400'}`}>
+                            {statusLabels[order.status]}
+                          </span>
+                          <p className="text-green-400 font-bold text-sm mt-1">${order.total.toFixed(2)}</p>
+                          <p className="text-gray-500 text-xs">{order.time}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
 
         {/* Quick Summary */}
@@ -234,6 +345,43 @@ const DashboardHome = () => {
                 <span className="text-yellow-400 font-bold text-xl">${avgOrderValue.toFixed(2)}</span>
               </div>
             </div>
+          </div>
+
+          {/* Online Staff / Accounts */}
+          <div className="border-t border-gray-700 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-white">🟢 Online Staff</h3>
+              <span className="text-xs text-green-400 font-semibold">{onlineStaff.length} active</span>
+            </div>
+            {onlineStaff.length === 0 ? (
+              <p className="text-gray-500 text-xs text-center py-2">No staff on duty</p>
+            ) : (
+              <div className="space-y-2 max-h-48 overflow-y-auto scrollbar-thin">
+                {onlineStaff.map(member => (
+                  <div key={member.id} className="flex items-center gap-3 bg-[#1f2329] rounded-lg p-2.5">
+                    <div className="relative shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
+                        {member.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-[#1f2329]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate">{member.name}</p>
+                      <p className="text-gray-500 text-[10px]">
+                        {roleIcons[member.role] || '👤'} {member.role}
+                      </p>
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                      member.status === 'on-duty'
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                        : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                    }`}>
+                      {member.status === 'on-duty' ? '● Duty' : '☕ Break'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

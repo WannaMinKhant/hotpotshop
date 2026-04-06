@@ -202,17 +202,17 @@ const en: Record<string, string> = {
 };
 
 const mm: Record<string, string> = {
-  'sidebar.dashboard': 'ဒက်ရှ်ဘုတ်',
-  'sidebar.cashier': 'ကက်ရှာ/POS',
+  'sidebar.dashboard': 'ပင်မစာမျက်နှာ',
+  'sidebar.cashier': 'အရောင်း/POS',
   'sidebar.kitchen': 'မီးဖိုချောင်',
   'sidebar.orders': 'အော်ဒါများ',
-  'sidebar.stock': 'စတော့',
-  'sidebar.recipes': 'ရွယ်ရာ',
+  'sidebar.stock': 'ကုန်ပစ္စည်း',
+  'sidebar.recipes': 'စားဖွယ်စုံ',
   'sidebar.customers': 'ဖောက်သည်',
   'sidebar.staff': 'ဝန်ထမ်း',
-  'sidebar.reports': 'အစီရင်ခံ',
+  'sidebar.reports': 'အစီရင်ခံစာ',
   'sidebar.users': 'အကောင့်များ',
-  'sidebar.admin': 'အက်ဒမင်',
+  'sidebar.admin': 'ပြင်ဆင်မည်',
   'sidebar.settings': 'ဆက်တင်',
   'sidebar.collapse': 'ချုံ့',
   'sidebar.expand': 'ချဲ့',

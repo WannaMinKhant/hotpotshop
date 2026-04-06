@@ -25,7 +25,6 @@ interface UserManagementState {
   resetPassword: (id: string, newPassword: string) => Promise<boolean>;
   toggleActive: (id: string, currentStatus: boolean) => Promise<boolean>;
   changeRole: (id: string, newRole: UserRole) => Promise<boolean>;
-  syncMissingProfiles: () => Promise<number>;
 }
 
 export const useUserManagementStore = create<UserManagementState>((set, get) => ({
