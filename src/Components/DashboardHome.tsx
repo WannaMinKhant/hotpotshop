@@ -32,6 +32,16 @@ const DashboardHome = () => {
     fetchCustomers();
     fetchTables();
     fetchStaff();
+
+    // Unsubscribe first to prevent duplicates (HMR in dev mode)
+    useStaffStore.getState().unsubscribe();
+    // Subscribe to realtime staff status changes
+    useStaffStore.getState().subscribe();
+
+    // Cleanup on unmount
+    return () => {
+      useStaffStore.getState().unsubscribe();
+    };
   }, [fetchOrders, fetchProducts, fetchCustomers, fetchTables, fetchStaff]);
 
   // Build table orders map from active orders
@@ -190,7 +200,7 @@ const DashboardHome = () => {
                     <tr key={order.id} className="border-b border-gray-800 hover:bg-[#32363d] transition">
                       <td className="px-5 py-4 text-yellow-400 font-semibold">{order.order_number}</td>
                       <td className="px-5 py-4 text-white">{order.table_number ? `Table ${order.table_number}` : order.order_type}</td>
-                      <td className="px-5 py-4 text-gray-300 truncate max-w-[200px]">
+                      <td className="px-5 py-4 text-gray-300 truncate max-w-50">
                         {order.items?.map(i => `${i.product_name} ×${i.quantity}`).join(', ') || '—'}
                       </td>
                       <td className="px-5 py-4 text-green-400 font-bold">${order.total.toFixed(2)}</td>
@@ -236,6 +246,46 @@ const DashboardHome = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Online Staff */}
+      <div className="mb-6 bg-[#272a30] rounded-xl border border-gray-700 overflow-hidden">
+        <div className="p-5 border-b border-gray-700">
+          <h2 className="text-xl font-bold text-white">🟢 Online Account</h2>
+          <p className="text-xs text-green-400 font-semibold mt-1">{onlineStaff.length} active</p>
+        </div>
+        {onlineStaff.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            <p className="text-3xl mb-2">👤</p>
+            <p className="text-sm">No staff on duty</p>
+          </div>
+        ) : (
+          <div className="p-5 space-y-2 max-h-48 overflow-y-auto scrollbar-thin">
+            {onlineStaff.map(member => (
+              <div key={member.id} className="flex items-center gap-3 bg-[#1f2329] rounded-lg p-2.5">
+                <div className="relative shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-linear-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
+                    {member.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-[#1f2329]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-semibold truncate">{member.name}</p>
+                  <p className="text-gray-500 text-[10px]">
+                    {roleIcons[member.role] || '👤'} {member.role}
+                  </p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                  member.status === 'on-duty'
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                }`}>
+                  {member.status === 'on-duty' ? '● Duty' : '☕ Break'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Kitchen Status */}
@@ -295,7 +345,7 @@ const DashboardHome = () => {
                       <div key={i} className="bg-[#272a30] rounded-lg p-3 flex items-center justify-between">
                         <div>
                           <p className="text-yellow-400 font-bold text-sm">{order.order_number}</p>
-                          <p className="text-gray-400 text-xs truncate max-w-[200px]">{order.items}</p>
+                          <p className="text-gray-400 text-xs truncate max-w-50">{order.items}</p>
                         </div>
                         <div className="text-right">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${statusColors[order.status] || 'bg-gray-500/20 text-gray-400'}`}>
@@ -345,43 +395,6 @@ const DashboardHome = () => {
                 <span className="text-yellow-400 font-bold text-xl">${avgOrderValue.toFixed(2)}</span>
               </div>
             </div>
-          </div>
-
-          {/* Online Staff / Accounts */}
-          <div className="border-t border-gray-700 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-white">🟢 Online Staff</h3>
-              <span className="text-xs text-green-400 font-semibold">{onlineStaff.length} active</span>
-            </div>
-            {onlineStaff.length === 0 ? (
-              <p className="text-gray-500 text-xs text-center py-2">No staff on duty</p>
-            ) : (
-              <div className="space-y-2 max-h-48 overflow-y-auto scrollbar-thin">
-                {onlineStaff.map(member => (
-                  <div key={member.id} className="flex items-center gap-3 bg-[#1f2329] rounded-lg p-2.5">
-                    <div className="relative shrink-0">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
-                        {member.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-[#1f2329]" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate">{member.name}</p>
-                      <p className="text-gray-500 text-[10px]">
-                        {roleIcons[member.role] || '👤'} {member.role}
-                      </p>
-                    </div>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-                      member.status === 'on-duty'
-                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                        : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                    }`}>
-                      {member.status === 'on-duty' ? '● Duty' : '☕ Break'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </div>

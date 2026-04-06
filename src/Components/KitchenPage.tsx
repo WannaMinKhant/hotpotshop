@@ -4,6 +4,7 @@ import { useNotificationStore } from '../stores/notificationStore';
 import type { Order, OrderItem } from '../types';
 
 type EnrichedOrder = Order & { minsAgo: number; timeLabel: string; isUrgent: boolean };
+type KitchenItem = OrderItem & { orderNumber: string; orderType: string; tableNumber?: number; orderId: number; created_at?: string; minsAgo: number; timeLabel: string; isUrgent: boolean; isNew: boolean };
 
 // Helper: compute enriched order data from a snapshot timestamp
 function enrichOrders(orders: (Order & { items?: OrderItem[] })[], now: number): EnrichedOrder[] {
@@ -20,8 +21,8 @@ function enrichOrders(orders: (Order & { items?: OrderItem[] })[], now: number):
 }
 
 const KitchenPage = () => {
-  const { orders, loading, error, fetchOrders, updateOrder } = useOrderStore();
-  const { kitchenCount } = useNotificationStore();
+  const { orders, loading, error, fetchOrders, updateOrderItemStatus } = useOrderStore();
+  const { kitchenCount, newItemIds } = useNotificationStore();
   const [now, setNow] = useState(Date.now());
 
   // Update timestamp every 30s so "time ago" stays fresh
@@ -36,16 +37,69 @@ const KitchenPage = () => {
 
   const enrichedOrders = useMemo(() => enrichOrders(orders, now), [orders, now]);
 
-  const pendingOrders = enrichedOrders.filter(o => o.status === 'pending');
-  const cookingOrders = enrichedOrders.filter(o => o.status === 'preparing');
-  const readyOrders = enrichedOrders.filter(o => o.status === 'ready');
+  // Flatten all items from all orders with order context
+  const allKitchenItems: KitchenItem[] = useMemo(() => {
+    const items: KitchenItem[] = [];
+    for (const order of enrichedOrders) {
+      // Skip completed/cancelled orders
+      if (['completed', 'cancelled'].includes(order.status)) continue;
+      
+      if (order.items) {
+        for (const item of order.items) {
+          // Skip items that are already served
+          if (item.status === 'served') continue;
+
+          items.push({
+            ...item,
+            orderNumber: order.order_number,
+            orderType: order.order_type,
+            tableNumber: order.table_number,
+            orderId: order.id!,
+            created_at: order.created_at,
+            minsAgo: order.minsAgo,
+            timeLabel: order.timeLabel,
+            isUrgent: order.isUrgent,
+            isNew: newItemIds.has(item.id!),
+          });
+        }
+      }
+    }
+    return items;
+  }, [enrichedOrders, newItemIds]);
+
+  // Group items by status
+  const pendingItems = allKitchenItems.filter(i => i.status === 'pending');
+  const preparingItems = allKitchenItems.filter(i => i.status === 'preparing');
+  const readyItems = allKitchenItems.filter(i => i.status === 'ready');
+
+  // Group items by order for display
+  function groupByOrder(items: KitchenItem[]) {
+    const groups: Map<string, { orderNumber: string; orderType: string; tableNumber?: number; items: KitchenItem[] }> = new Map();
+    for (const item of items) {
+      const key = item.orderNumber;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          orderNumber: item.orderNumber,
+          orderType: item.orderType,
+          tableNumber: item.tableNumber,
+          items: [],
+        });
+      }
+      groups.get(key)!.items.push(item);
+    }
+    return Array.from(groups.values());
+  }
+
+  const pendingGroups = groupByOrder(pendingItems);
+  const preparingGroups = groupByOrder(preparingItems);
+  const readyGroups = groupByOrder(readyItems);
 
   return (
     <div className="h-screen bg-[#1e2128] p-4 overflow-y-auto">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-white">🍲 Kitchen Display</h1>
-        <p className="text-gray-400 mt-1">Manage and track all kitchen orders</p>
+        <p className="text-gray-400 mt-1">Track individual items — each item moves independently</p>
       </div>
 
       {error && <div className="mb-4 p-3 bg-red-500/20 border border-red-500 rounded text-red-400">{error}</div>}
@@ -55,70 +109,73 @@ const KitchenPage = () => {
         <div className="bg-yellow-500/20 border border-yellow-500 rounded-xl p-4 flex items-center justify-between">
           <div>
             <p className="text-yellow-400 text-sm font-semibold">Pending</p>
-            <p className="text-3xl font-bold text-yellow-400">{loading ? '...' : pendingOrders.length}</p>
+            <p className="text-3xl font-bold text-yellow-400">{loading ? '...' : pendingItems.length}</p>
           </div>
           <span className="text-3xl">⏳</span>
         </div>
         <div className="bg-blue-500/20 border border-blue-500 rounded-xl p-4 flex items-center justify-between">
           <div>
             <p className="text-blue-400 text-sm font-semibold">Cooking</p>
-            <p className="text-3xl font-bold text-blue-400">{cookingOrders.length}</p>
+            <p className="text-3xl font-bold text-blue-400">{preparingItems.length}</p>
           </div>
           <span className="text-3xl">🔥</span>
         </div>
         <div className="bg-green-500/20 border border-green-500 rounded-xl p-4 flex items-center justify-between">
           <div>
             <p className="text-green-400 text-sm font-semibold">Ready</p>
-            <p className="text-3xl font-bold text-green-400">{readyOrders.length}</p>
+            <p className="text-3xl font-bold text-green-400">{readyItems.length}</p>
           </div>
           <span className="text-3xl">✅</span>
         </div>
       </div>
 
       {loading && orders.length === 0 ? (
-        <div className="text-center text-gray-400 py-12">Loading kitchen orders...</div>
+        <div className="text-center text-gray-400 py-12">Loading kitchen items...</div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Pending Column */}
           <div>
             <div className="flex items-center gap-2 mb-4">
               <span className="text-yellow-400 text-xl">⏳</span>
-              <h2 className="text-xl font-bold text-yellow-400">Pending ({pendingOrders.length})</h2>
+              <h2 className="text-xl font-bold text-yellow-400">Pending ({pendingItems.length})</h2>
             </div>
             <div className="space-y-3">
-              {pendingOrders.length === 0 && (
-                <div className="text-center text-gray-500 py-8">No pending orders</div>
+              {pendingGroups.length === 0 && (
+                <div className="text-center text-gray-500 py-8">No pending items</div>
               )}
-              {pendingOrders.map(order => (
+              {pendingGroups.map(group => (
                 <div
-                  key={order.id}
-                  className={`bg-[#272a30] rounded-xl border-2 ${order.isUrgent ? 'border-red-500' : 'border-yellow-500/50'}
-                    hover:border-yellow-500 transition-all shadow-lg`}
+                  key={group.orderNumber}
+                  className={`bg-[#272a30] rounded-xl border-2 ${group.items.some(i => i.isUrgent) ? 'border-red-500' : 'border-yellow-500/50'} hover:border-yellow-500 transition-all shadow-lg`}
                 >
                   <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                     <div>
-                      <h3 className="font-bold text-white text-lg">{order.table_number ? `Table ${order.table_number}` : order.order_type}</h3>
-                      <p className="text-sm text-gray-400">{order.order_number} • {order.timeLabel}</p>
+                      <h3 className="font-bold text-white text-lg">{group.tableNumber ? `Table ${group.tableNumber}` : group.orderType}</h3>
+                      <p className="text-sm text-gray-400">{group.orderNumber} • {group.items[0]?.timeLabel}</p>
                     </div>
-                    {order.isUrgent && (
+                    {group.items.some(i => i.isUrgent) && (
                       <span className="bg-red-500 text-white text-xs px-2 py-1 rounded font-bold">URGENT</span>
                     )}
                   </div>
                   <div className="p-4 space-y-2">
-                    {order.items?.map((item: OrderItem, i: number) => (
-                      <div key={i} className="flex justify-between items-center text-white">
-                        <span>🍽️ {item.product_name}</span>
-                        <span className="font-bold text-yellow-400 bg-yellow-500/20 px-2 py-1 rounded">x{item.quantity}</span>
+                    {group.items.map(item => (
+                      <div key={item.id} className={`flex justify-between items-center text-white ${item.isNew ? 'bg-orange-500/10 border border-orange-500/30 -mx-2 px-2 py-1 rounded' : ''}`}>
+                        <div className="flex items-center gap-2">
+                          {item.isNew && <span className="text-orange-400 text-xs">🔔</span>}
+                          <span>🍽️ {item.product_name}</span>
+                          {item.notes && <span className="text-xs bg-purple-500/30 text-purple-300 px-2 py-1 rounded">{item.notes}</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-yellow-400 bg-yellow-500/20 px-2 py-1 rounded">x{item.quantity}</span>
+                          <button
+                            onClick={() => updateOrderItemStatus(item.id!, 'preparing')}
+                            className="bg-blue-500 hover:bg-blue-400 text-white text-xs px-3 py-1 rounded font-bold transition"
+                          >
+                            Start →
+                          </button>
+                        </div>
                       </div>
                     ))}
-                  </div>
-                  <div className="p-4 border-t border-gray-700">
-                    <button
-                      onClick={() => updateOrder(order.id!, { status: 'preparing' })}
-                      className="w-full bg-blue-500 hover:bg-blue-400 text-white py-2 rounded-lg font-bold transition"
-                    >
-                      Start Cooking →
-                    </button>
                   </div>
                 </div>
               ))}
@@ -129,43 +186,44 @@ const KitchenPage = () => {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <span className="text-blue-400 text-xl">🔥</span>
-              <h2 className="text-xl font-bold text-blue-400">Cooking ({cookingOrders.length})</h2>
+              <h2 className="text-xl font-bold text-blue-400">Cooking ({preparingItems.length})</h2>
             </div>
             <div className="space-y-3">
-              {cookingOrders.length === 0 && (
-                <div className="text-center text-gray-500 py-8">No cooking orders</div>
+              {preparingGroups.length === 0 && (
+                <div className="text-center text-gray-500 py-8">No cooking items</div>
               )}
-              {cookingOrders.map(order => (
+              {preparingGroups.map(group => (
                 <div
-                  key={order.id}
-                  className={`bg-[#272a30] rounded-xl border-2 ${order.isUrgent ? 'border-red-500' : 'border-blue-500/50'}
-                    hover:border-blue-500 transition-all shadow-lg`}
+                  key={group.orderNumber}
+                  className={`bg-[#272a30] rounded-xl border-2 ${group.items.some(i => i.isUrgent) ? 'border-red-500' : 'border-blue-500/50'} hover:border-blue-500 transition-all shadow-lg`}
                 >
                   <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                     <div>
-                      <h3 className="font-bold text-white text-lg">{order.table_number ? `Table ${order.table_number}` : order.order_type}</h3>
-                      <p className="text-sm text-gray-400">{order.order_number} • {order.timeLabel}</p>
+                      <h3 className="font-bold text-white text-lg">{group.tableNumber ? `Table ${group.tableNumber}` : group.orderType}</h3>
+                      <p className="text-sm text-gray-400">{group.orderNumber} • {group.items[0]?.timeLabel}</p>
                     </div>
-                    {order.isUrgent && (
+                    {group.items.some(i => i.isUrgent) && (
                       <span className="bg-red-500 text-white text-xs px-2 py-1 rounded font-bold">URGENT</span>
                     )}
                   </div>
                   <div className="p-4 space-y-2">
-                    {order.items?.map((item: OrderItem, i: number) => (
-                      <div key={i} className="flex justify-between items-center text-white">
-                        <span>🍽️ {item.product_name}</span>
-                        {item.notes && <span className="text-xs bg-purple-500/30 text-purple-300 px-2 py-1 rounded">{item.notes}</span>}
-                        <span className="font-bold text-blue-400 bg-blue-500/20 px-2 py-1 rounded">x{item.quantity}</span>
+                    {group.items.map(item => (
+                      <div key={item.id} className="flex justify-between items-center text-white">
+                        <div className="flex items-center gap-2">
+                          <span>🍽️ {item.product_name}</span>
+                          {item.notes && <span className="text-xs bg-purple-500/30 text-purple-300 px-2 py-1 rounded">{item.notes}</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-blue-400 bg-blue-500/20 px-2 py-1 rounded">x{item.quantity}</span>
+                          <button
+                            onClick={() => updateOrderItemStatus(item.id!, 'ready')}
+                            className="bg-green-500 hover:bg-green-400 text-black text-xs px-3 py-1 rounded font-bold transition"
+                          >
+                            Ready ✓
+                          </button>
+                        </div>
                       </div>
                     ))}
-                  </div>
-                  <div className="p-4 border-t border-gray-700">
-                    <button
-                      onClick={() => updateOrder(order.id!, { status: 'ready' })}
-                      className="w-full bg-green-500 hover:bg-green-400 text-black py-2 rounded-lg font-bold transition"
-                    >
-                      Mark Ready ✓
-                    </button>
                   </div>
                 </div>
               ))}
@@ -176,41 +234,41 @@ const KitchenPage = () => {
           <div>
             <div className="flex items-center gap-2 mb-4">
               <span className="text-green-400 text-xl">✅</span>
-              <h2 className="text-xl font-bold text-green-400">Ready ({readyOrders.length})</h2>
+              <h2 className="text-xl font-bold text-green-400">Ready ({readyItems.length})</h2>
             </div>
             <div className="space-y-3">
-              {readyOrders.length === 0 && (
-                <div className="text-center text-gray-500 py-8">No ready orders</div>
+              {readyGroups.length === 0 && (
+                <div className="text-center text-gray-500 py-8">No ready items</div>
               )}
-              {readyOrders.map(order => (
+              {readyGroups.map(group => (
                 <div
-                  key={order.id}
+                  key={group.orderNumber}
                   className="bg-[#272a30] rounded-xl border-2 border-green-500 hover:border-green-400 transition-all shadow-lg"
                 >
                   <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                     <div>
-                      <h3 className="font-bold text-white text-lg">{order.table_number ? `Table ${order.table_number}` : order.order_type}</h3>
-                      <p className="text-sm text-gray-400">{order.order_number} • {order.timeLabel}</p>
+                      <h3 className="font-bold text-white text-lg">{group.tableNumber ? `Table ${group.tableNumber}` : group.orderType}</h3>
+                      <p className="text-sm text-gray-400">{group.orderNumber} • {group.items[0]?.timeLabel}</p>
                     </div>
-                    {order.isUrgent && (
-                      <span className="bg-red-500 text-white text-xs px-2 py-1 rounded font-bold">URGENT</span>
-                    )}
                   </div>
                   <div className="p-4 space-y-2">
-                    {order.items?.map((item: OrderItem, i: number) => (
-                      <div key={i} className="flex justify-between items-center text-white">
-                        <span>🍽️ {item.product_name}</span>
-                        <span className="font-bold text-green-400 bg-green-500/20 px-2 py-1 rounded">x{item.quantity}</span>
+                    {group.items.map(item => (
+                      <div key={item.id} className="flex justify-between items-center text-white">
+                        <div className="flex items-center gap-2">
+                          <span>🍽️ {item.product_name}</span>
+                          {item.notes && <span className="text-xs bg-purple-500/30 text-purple-300 px-2 py-1 rounded">{item.notes}</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-green-400 bg-green-500/20 px-2 py-1 rounded">x{item.quantity}</span>
+                          <button
+                            onClick={() => updateOrderItemStatus(item.id!, 'served')}
+                            className="bg-gray-600 hover:bg-gray-500 text-white text-xs px-3 py-1 rounded font-bold transition"
+                          >
+                            Served ↩
+                          </button>
+                        </div>
                       </div>
                     ))}
-                  </div>
-                  <div className="p-4 border-t border-gray-700">
-                    <button
-                      onClick={() => updateOrder(order.id!, { status: 'served' })}
-                      className="w-full bg-gray-600 hover:bg-gray-500 text-white py-2 rounded-lg font-bold transition"
-                    >
-                      Delivered ↩
-                    </button>
                   </div>
                 </div>
               ))}

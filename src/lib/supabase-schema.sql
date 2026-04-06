@@ -117,7 +117,8 @@ CREATE TABLE order_items (
   quantity NUMERIC(10, 2) NOT NULL DEFAULT 0,
   unit_price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
   subtotal NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-  notes TEXT
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'preparing', 'ready', 'served'))
 );
 
 -- 8. CUSTOMERS
@@ -168,6 +169,14 @@ CREATE TABLE user_profiles (
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ============================================
+-- MIGRATION: Add item-level status to existing order_items table
+-- Run this ONLY if you already have the order_items table created.
+-- This adds status column with default 'pending' for all existing items.
+-- ============================================
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'preparing', 'ready', 'served'));
+CREATE INDEX IF NOT EXISTS idx_order_items_status ON order_items(status);
 
 -- ============================================
 -- STEP 3: CREATE INDEXES
@@ -277,7 +286,39 @@ INSERT INTO categories (name, parent_id, emoji, is_active, sort_order) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================
--- STEP 8: VERIFY
+-- STEP 8: AUTO-CREATE USER PROFILE ON SIGNUP
+-- ============================================
+-- This trigger automatically creates a user_profiles
+-- entry when a new user signs up via Supabase Auth.
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.user_profiles (id, email, name, role, is_active)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1), 'User'),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'cashier'),
+    true
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+
+-- ============================================
+-- STEP 9: VERIFY
 -- ============================================
 SELECT 'Tables created' AS status, COUNT(*) AS table_count
 FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';

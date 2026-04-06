@@ -40,7 +40,6 @@ const CashierPage = () => {
   const { tables, fetchTables } = useTableStore();
   const { categories, fetchCategories } = useCategoryStore();
   const { recipes, fetchRecipes } = useRecipeStore();
-  const { addOrder } = useOrderStore();
   const addToast = useToastStore((s) => s.addToast);
 
   // Product tab (Stock vs Recipes)
@@ -54,7 +53,6 @@ const CashierPage = () => {
   const [recipeCart, setRecipeCart] = useState<RecipeCartItem[]>([]);
   const [selectedTable, setSelectedTable] = useState(1);
   const [orderType, setOrderType] = useState<string>('dine-in');
-  const [showPayment, setShowPayment] = useState(false);
   const [showHeldOrders, setShowHeldOrders] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -205,14 +203,12 @@ const CashierPage = () => {
   const tax = subtotal * 0.1;
   const total = subtotal + tax;
 
-  const handlePayment = async (method: string) => {
+  const handlePlaceOrder = async () => {
     if (allCartItems.length === 0 || submitting) return;
     setSubmitting(true);
     try {
-      // Map all cart items to order items
       const orderItems = allCartItems.map(item => {
         const isRecipe = (item as RecipeCartItem).isRecipe;
-        // Recipe items use convention: product_id = recipe_id + 100000
         const productId = isRecipe ? item.id + 100000 : item.id;
         return {
           product_id: productId,
@@ -223,30 +219,59 @@ const CashierPage = () => {
         };
       });
 
-      const orderNumber = await addOrder(
-        {
-          order_type: orderType as 'dine-in' | 'takeout' | 'delivery',
-          status: 'pending',
-          table_number: orderType === 'dine-in' ? selectedTable : undefined,
-          subtotal,
-          tax_amount: tax,
-          total,
-          notes: `Payment: ${method}`,
-          payment_method: method,
-        },
-        orderItems,
-      );
+      // For dine-in: check if this table has an existing active order
+      let existingOrderId: number | null = null;
+      if (orderType === 'dine-in' && selectedTable) {
+        const existingOrder = useOrderStore.getState().orders.find(o =>
+          o.table_number === selectedTable &&
+          ['pending', 'preparing', 'ready', 'served'].includes(o.status)
+        );
+        existingOrderId = existingOrder?.id || null;
+      }
+
+      let orderNumber: string;
+
+      if (existingOrderId) {
+        // Add items to existing order (same table, active)
+        const added = await useOrderStore.getState().addItemsToOrder(existingOrderId, orderItems);
+        if (added) {
+          const existingOrder = useOrderStore.getState().orders.find(o => o.id === existingOrderId);
+          orderNumber = existingOrder?.order_number || '';
+          addToast(`${allCartItems.length} item(s) added to ${orderNumber} (Table ${selectedTable})!`, 'success');
+        } else {
+          addToast('Failed to add items to existing order.', 'error');
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        // Create new order
+        orderNumber = await useOrderStore.getState().addOrder(
+          {
+            order_type: orderType as 'dine-in' | 'takeout' | 'delivery',
+            status: 'pending',
+            table_number: orderType === 'dine-in' ? selectedTable : undefined,
+            subtotal,
+            tax_amount: tax,
+            total,
+            notes: '',
+            payment_method: undefined,
+          },
+          orderItems,
+        );
+
+        if (orderNumber) {
+          addToast(`Order ${orderNumber} placed!`, 'success');
+        } else {
+          addToast('Failed to place order.', 'error');
+        }
+      }
 
       if (orderNumber) {
         setCart([]);
         setRecipeCart([]);
-        setShowPayment(false);
-        addToast(`Order ${orderNumber} created via ${method}!`, 'success');
-      } else {
-        addToast('Failed to create order.', 'error');
       }
     } catch {
-      addToast('Failed to create order. Please try again.', 'error');
+      addToast('Failed to place order. Please try again.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -537,13 +562,22 @@ const CashierPage = () => {
             </div>
           </div>
           <button
-            onClick={() => setShowPayment(true)}
-            disabled={cart.length === 0}
-            className={`w-full py-3 rounded-lg text-lg font-bold mb-2 transition ${
-              cart.length > 0 ? 'bg-green-500 hover:bg-green-400 text-black' : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+            onClick={handlePlaceOrder}
+            disabled={allCartItems.length === 0 || submitting}
+            className={`w-full py-3 rounded-lg text-lg font-bold mb-2 transition flex items-center justify-center gap-2 ${
+              allCartItems.length > 0 && !submitting
+                ? 'bg-green-500 hover:bg-green-400 text-black'
+                : 'bg-gray-600 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {cart.length > 0 ? `💳 Pay $${total.toFixed(2)}` : '💳 Pay'}
+            {submitting ? (
+              <>
+                <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                Placing...
+              </>
+            ) : (
+              <>📋 Place Order — ${total.toFixed(2)}</>
+            )}
           </button>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -607,49 +641,6 @@ const CashierPage = () => {
                   ))
                 )}
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Payment Modal */}
-        {showPayment && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-[#272a30] rounded-xl border border-gray-600 p-6 w-80">
-              <h2 className="text-xl font-bold text-white mb-4">💳 Payment</h2>
-              <div className="text-center mb-6">
-                <p className="text-gray-400">Total Amount</p>
-                <p className="text-3xl font-bold text-green-400">${total.toFixed(2)}</p>
-              </div>
-              <div className="space-y-2 mb-4">
-                <button
-                  onClick={() => handlePayment('card')}
-                  disabled={submitting}
-                  className="w-full bg-blue-500 hover:bg-blue-400 py-3 rounded-lg text-white font-bold disabled:opacity-50"
-                >
-                  💳 Card Payment
-                </button>
-                <button
-                  onClick={() => handlePayment('cash')}
-                  disabled={submitting}
-                  className="w-full bg-green-500 hover:bg-green-400 py-3 rounded-lg text-black font-bold disabled:opacity-50"
-                >
-                  💵 Cash
-                </button>
-                <button
-                  onClick={() => handlePayment('qr')}
-                  disabled={submitting}
-                  className="w-full bg-purple-500 hover:bg-purple-400 py-3 rounded-lg text-white font-bold disabled:opacity-50"
-                >
-                  📱 QR/Digital
-                </button>
-              </div>
-              <button
-                onClick={() => setShowPayment(false)}
-                disabled={submitting}
-                className="w-full bg-gray-600 hover:bg-gray-500 py-2 rounded-lg text-white disabled:opacity-50"
-              >
-                Cancel
-              </button>
             </div>
           </div>
         )}

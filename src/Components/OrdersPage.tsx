@@ -13,6 +13,7 @@ const OrdersPage = () => {
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [paymentOrderId, setPaymentOrderId] = useState<number | null>(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
@@ -81,9 +82,11 @@ const OrdersPage = () => {
     delivery: displayOrders.filter(o => o.order_type === 'delivery').length,
   };
 
-  const handlePayAndComplete = (orderId: number) => {
+  const handlePayAndComplete = async (orderId: number) => {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
+
+    setPaymentLoading(true);
 
     const receipt: ReceiptData = {
       orderNumber: order.order_number || `ORD-${orderId}`,
@@ -102,11 +105,15 @@ const OrdersPage = () => {
       timestamp: new Date().toLocaleString(),
     };
 
-    setReceiptData(receipt);
-    setShowReceipt(true);
+    // Simulate server request
+    await new Promise(resolve => setTimeout(resolve, 800));
+    updateOrder(orderId, { status: 'completed' });
+
+    setPaymentLoading(false);
     setPaymentOrderId(null);
     setSelectedPaymentMethod('');
-    updateOrder(orderId, { status: 'completed' });
+    setReceiptData(receipt);
+    setShowReceipt(true);
   };
 
   const statusConfig: Record<string, { label: string; bg: string; text: string; border: string }> = {
@@ -349,16 +356,28 @@ const OrdersPage = () => {
                                   <div className="mt-3 mb-3">
                                     <p className="text-gray-400 text-xs font-semibold uppercase mb-2">Order Items</p>
                                     <div className="space-y-1.5">
-                                      {(order.items || []).map((item, i) => (
-                                        <div key={item.id || i} className="flex items-center justify-between bg-[#272a30] rounded-lg px-3 py-2">
-                                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                                            <span className="text-sm font-bold text-yellow-400 shrink-0">×{item.quantity}</span>
-                                            <span className="text-white text-sm truncate">{item.product_name}</span>
-                                            {item.notes && <span className="text-purple-400 text-[10px] bg-purple-500/20 px-1.5 py-0.5 rounded shrink-0">{item.notes}</span>}
+                                      {(order.items || []).map((item, i) => {
+                                        const itemStatusConfig: Record<string, { label: string; bg: string; text: string }> = {
+                                          pending: { label: '⏳', bg: 'bg-yellow-500/20', text: 'text-yellow-400' },
+                                          preparing: { label: '🔥', bg: 'bg-blue-500/20', text: 'text-blue-400' },
+                                          ready: { label: '✅', bg: 'bg-green-500/20', text: 'text-green-400' },
+                                          served: { label: '🍽', bg: 'bg-gray-500/20', text: 'text-gray-400' },
+                                        };
+                                        const itemStatus = item.status ? itemStatusConfig[item.status] : itemStatusConfig.pending;
+                                        return (
+                                          <div key={item.id || i} className="flex items-center justify-between bg-[#272a30] rounded-lg px-3 py-2">
+                                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                              <span className="text-sm font-bold text-yellow-400 shrink-0">×{item.quantity}</span>
+                                              <span className="text-white text-sm truncate">{item.product_name}</span>
+                                              {item.notes && <span className="text-purple-400 text-[10px] bg-purple-500/20 px-1.5 py-0.5 rounded shrink-0">{item.notes}</span>}
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                              <span className={`${itemStatus.text} text-xs`} title={item.status}>{itemStatus.label}</span>
+                                              <span className="text-green-400 text-sm font-semibold ml-2">${item.subtotal.toFixed(2)}</span>
+                                            </div>
                                           </div>
-                                          <span className="text-green-400 text-sm font-semibold shrink-0 ml-2">${item.subtotal.toFixed(2)}</span>
-                                        </div>
-                                      ))}
+                                        );
+                                      })}
                                     </div>
                                   </div>
 
@@ -372,15 +391,6 @@ const OrdersPage = () => {
 
                                   {/* Action Buttons */}
                                   <div className="flex gap-2 mt-3 flex-wrap">
-                                    {order.status === 'pending' && (
-                                      <button onClick={() => updateOrder(order.id!, { status: 'preparing' })} className="bg-blue-500 hover:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm font-bold">▶ Start Cooking</button>
-                                    )}
-                                    {order.status === 'preparing' && (
-                                      <button onClick={() => updateOrder(order.id!, { status: 'ready' })} className="bg-purple-500 hover:bg-purple-400 text-white px-4 py-2 rounded-lg text-sm font-bold">✅ Mark Ready</button>
-                                    )}
-                                    {order.status === 'ready' && (
-                                      <button onClick={() => updateOrder(order.id!, { status: 'served' })} className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 rounded-lg text-sm font-bold">🍽 Mark Served</button>
-                                    )}
                                     {order.status === 'served' && (
                                       <button onClick={() => setPaymentOrderId(order.id!)} className="bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-lg text-sm font-bold">💰 Pay & Complete</button>
                                     )}
@@ -440,23 +450,138 @@ const OrdersPage = () => {
         </div>
       )}
 
-      {/* Payment Modal */}
+      {/* Payment Panel — Right Side */}
       {paymentOrderId && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[#272a30] rounded-xl border border-yellow-600 p-6 w-96">
-            <h2 className="text-white font-bold text-xl mb-4">💳 Payment</h2>
-            <p className="text-gray-400 mb-4">Select payment method:</p>
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              <button onClick={() => setSelectedPaymentMethod('card')} className={`p-4 rounded-lg font-bold text-center transition ${selectedPaymentMethod === 'card' ? 'bg-blue-500 text-white ring-2 ring-blue-400' : 'bg-[#1e2128] text-gray-300 hover:bg-[#2f333a]'}`}>💳<br />Card</button>
-              <button onClick={() => setSelectedPaymentMethod('cash')} className={`p-4 rounded-lg font-bold text-center transition ${selectedPaymentMethod === 'cash' ? 'bg-green-500 text-white ring-2 ring-green-400' : 'bg-[#1e2128] text-gray-300 hover:bg-[#2f333a]'}`}>💵<br />Cash</button>
-              <button onClick={() => setSelectedPaymentMethod('qr')} className={`p-4 rounded-lg font-bold text-center transition ${selectedPaymentMethod === 'qr' ? 'bg-purple-500 text-white ring-2 ring-purple-400' : 'bg-[#1e2128] text-gray-300 hover:bg-[#2f333a]'}`}>📱<br />QR</button>
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+            onClick={() => { if (!paymentLoading) { setPaymentOrderId(null); setSelectedPaymentMethod(''); } }}
+          />
+          {/* Right Panel */}
+          <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-[#272a30] border-l border-gray-700 z-50 shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="p-5 border-b border-gray-700 flex items-center justify-between shrink-0">
+              <div>
+                <h2 className="text-xl font-bold text-white">💳 Payment</h2>
+                <p className="text-gray-400 text-sm mt-0.5">
+                  {(() => { const o = orders.find(x => x.id === paymentOrderId); return o?.order_number || ''; })()}
+                </p>
+              </div>
+              {!paymentLoading && (
+                <button
+                  onClick={() => { setPaymentOrderId(null); setSelectedPaymentMethod(''); }}
+                  className="w-8 h-8 rounded-lg bg-[#1e2128] hover:bg-[#2f333a] flex items-center justify-center text-gray-400 hover:text-white transition"
+                >
+                  ✕
+                </button>
+              )}
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => handlePayAndComplete(paymentOrderId)} disabled={!selectedPaymentMethod} className={`flex-1 py-2.5 rounded-lg font-bold ${selectedPaymentMethod ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}>Complete Payment</button>
-              <button onClick={() => { setPaymentOrderId(null); setSelectedPaymentMethod(''); }} className="flex-1 bg-gray-600 text-white py-2.5 rounded-lg hover:bg-gray-500">Cancel</button>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-5">
+              {paymentLoading ? (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <div className="relative mb-4">
+                    <div className="w-16 h-16 border-4 border-yellow-500/30 border-t-yellow-500 rounded-full animate-spin" />
+                  </div>
+                  <p className="text-white font-bold text-lg">Processing Payment...</p>
+                  <p className="text-gray-400 text-sm mt-1">Please wait while we complete your order</p>
+                </div>
+              ) : (
+                <>
+                  {/* Order Summary */}
+                  {(() => {
+                    const o = orders.find(x => x.id === paymentOrderId);
+                    if (!o) return null;
+                    return (
+                      <div className="bg-[#1f2329] rounded-xl border border-gray-700 p-4 mb-6">
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="text-yellow-400 font-bold text-sm">{o.order_number}</span>
+                          <span className="text-green-400 font-bold text-xl">${o.total.toFixed(2)}</span>
+                        </div>
+                        <div className="space-y-1">
+                          {(o.items || []).map((item, i) => (
+                            <div key={item.id || i} className="flex justify-between text-sm">
+                              <span className="text-gray-300 truncate">×{item.quantity} {item.product_name}</span>
+                              <span className="text-gray-400 ml-2">${item.subtotal.toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Payment Methods */}
+                  <p className="text-gray-400 text-sm mb-3">Select payment method:</p>
+                  <div className="grid grid-cols-3 gap-3 mb-6">
+                    <button
+                      onClick={() => setSelectedPaymentMethod('card')}
+                      disabled={paymentLoading}
+                      className={`p-4 rounded-xl font-bold text-center transition-all ${
+                        selectedPaymentMethod === 'card'
+                          ? 'bg-blue-500 text-white ring-2 ring-blue-400 shadow-lg shadow-blue-500/20 scale-105'
+                          : 'bg-[#1e2128] text-gray-300 hover:bg-[#2f333a]'
+                      }`}
+                    >
+                      <span className="text-2xl block mb-1">💳</span>
+                      <span className="text-xs">Card</span>
+                    </button>
+                    <button
+                      onClick={() => setSelectedPaymentMethod('cash')}
+                      disabled={paymentLoading}
+                      className={`p-4 rounded-xl font-bold text-center transition-all ${
+                        selectedPaymentMethod === 'cash'
+                          ? 'bg-green-500 text-white ring-2 ring-green-400 shadow-lg shadow-green-500/20 scale-105'
+                          : 'bg-[#1e2128] text-gray-300 hover:bg-[#2f333a]'
+                      }`}
+                    >
+                      <span className="text-2xl block mb-1">💵</span>
+                      <span className="text-xs">Cash</span>
+                    </button>
+                    <button
+                      onClick={() => setSelectedPaymentMethod('qr')}
+                      disabled={paymentLoading}
+                      className={`p-4 rounded-xl font-bold text-center transition-all ${
+                        selectedPaymentMethod === 'qr'
+                          ? 'bg-purple-500 text-white ring-2 ring-purple-400 shadow-lg shadow-purple-500/20 scale-105'
+                          : 'bg-[#1e2128] text-gray-300 hover:bg-[#2f333a]'
+                      }`}
+                    >
+                      <span className="text-2xl block mb-1">📱</span>
+                      <span className="text-xs">QR</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
+
+            {/* Footer Actions */}
+            {!paymentLoading && (
+              <div className="p-5 border-t border-gray-700 shrink-0">
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handlePayAndComplete(paymentOrderId)}
+                    disabled={!selectedPaymentMethod}
+                    className={`flex-1 py-3 rounded-xl font-bold transition-all ${
+                      selectedPaymentMethod
+                        ? 'bg-gradient-to-r from-yellow-500 to-yellow-400 text-black hover:from-yellow-400 hover:to-yellow-300 shadow-lg shadow-yellow-500/20'
+                        : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Complete Payment
+                  </button>
+                  <button
+                    onClick={() => { setPaymentOrderId(null); setSelectedPaymentMethod(''); }}
+                    className="px-5 bg-gray-600 hover:bg-gray-500 text-white rounded-xl font-bold transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        </>
       )}
 
       {/* Receipt Slip */}

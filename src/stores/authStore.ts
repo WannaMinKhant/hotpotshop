@@ -1,4 +1,4 @@
-// Auth store using Supabase (phone-based)
+// Auth store using Supabase
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import type { User } from '@supabase/supabase-js';
@@ -9,7 +9,7 @@ interface AuthState {
   role: UserRole;
   loading: boolean;
   initialized: boolean;
-  setUser: (user: User | null) => void;
+  setUser: (user: User | null) => Promise<void>;
   setRole: (role: UserRole) => void;
   fetchRole: (userId: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -30,12 +30,54 @@ const getSavedRole = (): UserRole => {
   return DEFAULT_ROLE;
 };
 
+// Update staff status in the staff table (matched by email)
+// If no staff record exists, create one
+const updateStaffStatus = async (email: string | undefined, status: 'on-duty' | 'off-duty', name?: string, role?: UserRole) => {
+  if (!email) return;
+  try {
+    // Check if staff record exists
+    const { data: existing } = await supabase
+      .from('staff')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existing) {
+      // Update existing staff record
+      await supabase
+        .from('staff')
+        .update({ status })
+        .eq('email', email);
+    } else if (status === 'on-duty') {
+      // Create new staff record on first login
+      await supabase
+        .from('staff')
+        .insert([{
+          name: name || email.split('@')[0],
+          role: role || 'cashier',
+          email,
+          status: 'on-duty',
+        }]);
+    }
+  } catch (e) {
+    console.error('[authStore] Failed to update staff status:', e);
+  }
+};
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   role: getSavedRole(),
   loading: true,
   initialized: false,
-  setUser: (user) => set({ user, loading: false }),
+  setUser: async (user) => {
+    set({ user, loading: false });
+    // Sync staff status: mark on-duty on login
+    if (user) {
+      const currentRole = useAuthStore.getState().role;
+      const name = user.user_metadata?.name || user.email?.split('@')[0];
+      await updateStaffStatus(user.email, 'on-duty', name, currentRole);
+    }
+  },
   setInitialized: () => set({ initialized: true }),
   setRole: (role) => {
     localStorage.setItem(ROLE_KEY, role);
@@ -62,6 +104,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signOut: async () => {
+    // Mark off-duty before signing out
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser) {
+      await updateStaffStatus(currentUser.email, 'off-duty');
+    }
     localStorage.removeItem(ROLE_KEY);
     await supabase.auth.signOut();
     set({ user: null, role: DEFAULT_ROLE, loading: false });

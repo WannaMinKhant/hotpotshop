@@ -1,14 +1,19 @@
 // Real-time notification store for Kitchen and Orders badges
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface NotificationState {
   kitchenCount: number;
   ordersCount: number;
   loading: boolean;
-  _channel: RealtimeChannel | null;
-  
+  _channel: ReturnType<typeof supabase.channel> | null;
+
+  // Kitchen new item alerts — individual items that were added to orders already in progress
+  newItemIds: Set<number>;
+  addNewItemId: (orderItemId: number) => void;
+  removeNewItemId: (orderItemId: number) => void;
+  clearNewItemIds: () => void;
+
   fetchCounts: () => Promise<void>;
   subscribeToOrders: () => void;
   unsubscribe: () => void;
@@ -19,13 +24,34 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   ordersCount: 0,
   loading: false,
   _channel: null,
+  newItemIds: new Set<number>(),
+
+  addNewItemId: (orderItemId: number) => {
+    set((state) => {
+      const newSet = new Set(state.newItemIds);
+      newSet.add(orderItemId);
+      return { newItemIds: newSet };
+    });
+  },
+
+  removeNewItemId: (orderItemId: number) => {
+    set((state) => {
+      const newSet = new Set(state.newItemIds);
+      newSet.delete(orderItemId);
+      return { newItemIds: newSet };
+    });
+  },
+
+  clearNewItemIds: () => {
+    set({ newItemIds: new Set<number>() });
+  },
 
   fetchCounts: async () => {
     set({ loading: true });
     try {
-      // Count kitchen orders (pending + preparing + ready)
+      // Count kitchen items (pending + preparing + ready)
       const { count: kitchenCount } = await supabase
-        .from('orders')
+        .from('order_items')
         .select('*', { count: 'exact', head: true })
         .in('status', ['pending', 'preparing', 'ready']);
 
@@ -62,6 +88,19 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         async () => {
           console.log('[notificationStore] Orders change detected');
           // Refresh counts on any order change
+          await get().fetchCounts();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'order_items',
+        },
+        async () => {
+          console.log('[notificationStore] Order items change detected');
+          // Refresh counts on any order item change
           await get().fetchCounts();
         }
       )

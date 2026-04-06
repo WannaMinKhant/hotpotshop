@@ -66,6 +66,7 @@ export interface OrderItem {
   unit_price: number;
   subtotal: number;
   notes?: string;
+  status?: 'pending' | 'preparing' | 'ready' | 'served';
 }
 
 export interface Customer {

@@ -27,7 +27,7 @@ interface UserManagementState {
   changeRole: (id: string, newRole: UserRole) => Promise<boolean>;
 }
 
-export const useUserManagementStore = create<UserManagementState>((set, get) => ({
+export const useUserManagementStore = create<UserManagementState>((set) => ({
   profiles: [],
   loading: false,
   error: null,
@@ -197,49 +197,6 @@ export const useUserManagementStore = create<UserManagementState>((set, get) => 
     } catch (e: unknown) {
       set({ error: e instanceof Error ? e.message : 'Failed to change role' });
       return false;
-    } finally {
-      set({ loading: false });
-    }
-  },
-
-  // Sync missing auth users to user_profiles (run once after manual auth user creation)
-  syncMissingProfiles: async () => {
-    set({ loading: true, error: null });
-    try {
-      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
-      if (authError) throw authError;
-
-      const { data: existingProfiles } = await supabase
-        .from('user_profiles')
-        .select('id');
-
-      const existingIds = new Set(existingProfiles?.map(p => p.id) || []);
-      const missingUsers = authUsers.users.filter(u => !existingIds.has(u.id));
-
-      let synced = 0;
-      for (const user of missingUsers) {
-        const email = user.email || '';
-        const name = user.user_metadata?.name || email.split('@')[0] || 'Unknown';
-        const role = user.user_metadata?.role || 'cashier';
-
-        await supabase.from('user_profiles').insert([{
-          id: user.id,
-          email,
-          name,
-          role,
-          is_active: true,
-        }]);
-        synced++;
-      }
-
-      console.log(`[userManagementStore] Synced ${synced} missing profiles`);
-      await get().fetchProfiles();
-      return synced;
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Failed to sync profiles';
-      console.error('[userManagementStore] Sync failed:', message);
-      set({ error: message });
-      return 0;
     } finally {
       set({ loading: false });
     }

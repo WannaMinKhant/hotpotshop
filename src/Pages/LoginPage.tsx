@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
 import { useToastStore } from '../stores/toastStore';
 import { useNavigate } from 'react-router-dom';
+import { roleDefaultPage } from '../lib/roles';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -11,7 +12,7 @@ const LoginPage = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { setUser } = useAuthStore();
+  const { setUser, fetchRole } = useAuthStore();
   const addToast = useToastStore((s) => s.addToast);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -33,9 +34,13 @@ const LoginPage = () => {
         if (error) throw error;
         if (data.user) {
           setUser(data.user);
+          // Fetch user's role from database
+          await fetchRole(data.user.id);
           addToast('Welcome back!', 'success');
-          navigate('/');
-
+          // Navigate to role's default page (read fresh from store)
+          const userRole = useAuthStore.getState().role;
+          const defaultPage = roleDefaultPage[userRole] || 'dashboard';
+          navigate(`/${defaultPage}`);
         }
       }
     } catch (e: unknown) {
