@@ -38,11 +38,14 @@ A complete restaurant POS and management system built with **React 19**, **TypeS
 - **Search** — Filter products or recipes by name
 
 ### 🍲 Kitchen Display
-- **Kanban Board** — Pending → Cooking → Ready → Served columns
-- **New Items Alert** — When items are added to an active order (not pending), an orange banner warns kitchen: "🔔 New items added — Review before cooking" with ✓ OK acknowledge button; prevents missed items
-- **Urgency Detection** — Orders older than 15 minutes highlighted in red
-- **Live Updates** — Badge count on sidebar updates in real-time
+- **Item-Level Kanban Board** — Pending → Cooking → Ready → Served columns; **each individual item** has its own status, not the whole order
+- **Per-Item Actions** — Each item has its own `Start →`, `Ready ✓`, `Served ↩` button; items move independently through the workflow
+- **Order Grouping** — Items are visually grouped by order number within each column; shows order number, table/type, and time ago
+- **New Items Alert** — When items are added to an active order (not pending), a 🔔 orange indicator highlights the new items; kitchen clicks acknowledge
+- **Urgency Detection** — Orders older than 15 minutes highlighted in red at order group level
+- **Live Updates** — Badge count on sidebar updates in real-time (counts individual items, not orders)
 - **Time-Aware** — "X min ago" labels refresh every 30 seconds
+- **Auto-Serve Detection** — When all items in an order reach "served", the order status auto-updates to "served" for payment
 
 ### 📋 Orders
 - **3-Tab View** — Active Orders / Today / History
@@ -50,10 +53,10 @@ A complete restaurant POS and management system built with **React 19**, **TypeS
 - **Time Sub-Groups** — Last Hour / 1–3 Hours Ago / Older within each type
 - **Search** — Filter by order number, customer name, table, or type
 - **Expandable Cards** — Click to view items, totals, and actions
-- **Actions by Status** — Start Cooking → Mark Ready → Mark Served → Pay & Complete
-- **View Receipt** — Re-open receipt slip for completed orders
-- **Cancel** — Mark active orders as cancelled
+- **Item Status Badges** — Each item shows its kitchen status (⏳ pending, 🔥 preparing, ✅ ready, 🍽 served)
+- **Actions** — Pay & Complete (served orders), View Receipt (completed), Cancel (active)
 - **Right-Side Payment Panel** — Order summary, payment method selection, loading spinner during processing
+- **Receipt Slip** — Column layout: receipt on top, Print/Done buttons below; auto-opens after payment
 
 ### 📦 Stock Control
 - **Clickable Stat Cards** — Total Products / Low Stock / In Stock cards filter the product list
@@ -242,7 +245,7 @@ src/
 | `categories` | Product categories (name, emoji, parent_id, sort_order) |
 | `stock_movements` | Purchase/sale/adjustment/waste/return tracking |
 | `orders` | Customer orders (type, status, payment) |
-| `order_items` | Order line items (product, qty, price) |
+| `order_items` | Order line items (product, qty, price, **status**) |
 | `recipes` | Menu items/dishes |
 | `recipe_ingredients` | Links recipes to products with quantities |
 | `customers` | Customer profiles (tier, spending history) |
@@ -295,12 +298,23 @@ npm run lint         # ESLint check
 
 ### Smart Order Combining (Cashier → Kitchen → Payment)
 ```
-T1: Place Order (2 items) → ORD-123 (pending) → Kitchen sees in Pending
-T1: Start Cooking → Kitchen moves to Cooking
+T1: Place Order (2 items) → ORD-123 (pending) → Kitchen sees 2 items in Pending
+T1: Item A → Start Cooking → Item A moves to Cooking (Item B stays Pending)
 T1: Place Order (3 more items) → Added to ORD-123 (same order!)
-     Kitchen sees 🔔 orange alert → Acknowledges → Cooks all 5 items
-T1: Mark Ready → Served
+     Kitchen sees 🔔 on new items → Acknowledges → Cooks all 5 items
+T1: Each item moves independently: pending → preparing → ready → served
+T1: All 5 items served → Order auto-updates to "served"
 T1: Pay & Complete → Single receipt for all 5 items → Stock deducted
+```
+
+### Kitchen Item Workflow
+```
+Order placed → All items start as "pending"
+Kitchen sees: Items grouped by order in Pending column
+Chef clicks "Start →" on individual item → That item moves to Cooking
+Chef clicks "Ready ✓" on individual item → That item moves to Ready
+Chef clicks "Served ↩" on individual item → That item is served
+When ALL items in order are served → Order status auto-updates to "served"
 ```
 
 ### Placing an Order (Cashier)
@@ -339,9 +353,9 @@ T1: Pay & Complete → Single receipt for all 5 items → Stock deducted
 
 ### How It Works
 ```
-Order Created/Updated
+Order Created/Updated OR Order Item Created/Updated
         ↓
-Supabase Realtime Trigger (postgres_changes on orders table)
+Supabase Realtime Trigger (postgres_changes on orders + order_items tables)
         ↓
 notificationStore.fetchCounts()
         ↓
@@ -353,7 +367,7 @@ KitchenPage/OrdersPage re-fetch if mounted
 ```
 
 ### Badge Logic
-- **Kitchen Badge**: `COUNT(*) FROM orders WHERE status IN ('pending', 'preparing', 'ready')`
+- **Kitchen Badge**: `COUNT(*) FROM order_items WHERE status IN ('pending', 'preparing', 'ready')`
 - **Orders Badge**: `COUNT(*) FROM orders WHERE status NOT IN ('completed', 'cancelled')`
 
 ### New Items Alert Logic
@@ -362,11 +376,26 @@ POS adds items to order
         ↓
 orderStore.addItemsToOrder() checks order status
         ↓
-If status != 'pending' → notificationStore.addNewItemId(orderId)
+If status != 'pending' → fetches new item IDs from DB
         ↓
-KitchenPage shows orange banner on affected orders
+notificationStore.addNewItemId(orderItemId) for each new item
         ↓
-Kitchen clicks ✓ OK → notificationStore.removeNewItemId(orderId)
+KitchenPage shows 🔔 orange indicator on affected items
+        ↓
+Kitchen acknowledges → indicator removed
+```
+
+### Auto-Serve Logic
+```
+Kitchen marks item as 'served'
+        ↓
+orderStore.updateOrderItemStatus() updates item status
+        ↓
+Checks if ALL items in the order are now 'served'
+        ↓
+If yes → order.status = 'served' (auto-update)
+        ↓
+Order appears in OrdersPage with "💰 Pay & Complete" button
 ```
 
 ### Staff Online Logic
@@ -516,6 +545,22 @@ Each role sees only the menu items they have access to in the sidebar. Attemptin
 #### 18. README.md Updates
 - Comprehensive rewrite with all new features, architecture diagrams, workflow examples
 - Added Real-Time System, Role-Based Access, and Conversation Summary sections
+
+#### 19. Kitchen Algorithm — Order-Level to Item-Level Status
+- **Database**: Added `status` column to `order_items` table (`pending`, `preparing`, `ready`, `served`)
+- **Migration**: `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS status...` + index
+- **Types**: `OrderItem` interface now includes `status` field
+- **orderStore**: `addOrder()` and `addItemsToOrder()` set `status: 'pending'` on new items
+- **New function**: `updateOrderItemStatus(orderItemId, status)` — updates individual item status
+- **notificationStore**: Changed from order-level (`newItemOrderIds`) to item-level (`newItemIds`); kitchen badge now counts items from `order_items`, not orders; subscribes to `order_items` table changes
+- **KitchenPage rewrite**: Complete rewrite — items flattened from all orders, grouped by item status, then visually grouped by order; per-item action buttons (`Start →`, `Ready ✓`, `Served ↩`); 🔔 indicator on new items
+- **OrdersPage update**: Removed order-level cooking status buttons (Start Cooking, Mark Ready, Mark Served); OrdersPage now only handles payment/cancel/view receipt; item status badges shown per item in expanded view
+- **Auto-serve**: When all items in an order reach `served`, order status auto-updates to `served` for payment
+- **UX fix**: Eliminated duplicate status control conflict — Kitchen manages item status, OrdersPage manages payment
+
+#### 20. Receipt Slip Layout Fix
+- Fixed ReceiptSlip overlay layout: receipt slip now stacks vertically with action buttons below
+- Container uses `max-w-sm` for centered narrow layout with `overflow-y-auto` for scroll on small screens
 
 ---
 
