@@ -193,6 +193,23 @@ const en: Record<string, string> = {
   'reports.noData': 'No data for this period',
   'reports.noRevenue': 'No revenue data for this period',
 
+  // User Manual
+  'manual.title': '📖 User Manual',
+  'manual.overview': 'Overview',
+  'manual.login': 'Login & Authentication',
+  'manual.dashboard': 'Dashboard',
+  'manual.cashier': 'Cashier/POS',
+  'manual.kitchen': 'Kitchen Display',
+  'manual.orders': 'Orders Management',
+  'manual.ordersByDate': 'Orders by Date',
+  'manual.stock': 'Stock Control',
+  'manual.recipes': 'Recipes/Menu',
+  'manual.customers': 'Customers',
+  'manual.staff': 'Staff Management',
+  'manual.reports': 'Reports & Analytics',
+  'manual.users': 'User Accounts',
+  'manual.admin': 'Admin Settings',
+
   // Settings
   'settings.title': '⚙️ Settings',
   'settings.language': 'Language',
@@ -380,6 +397,23 @@ const mm: Record<string, string> = {
   'reports.lowStock': 'စတော့ နည်းနေ',
   'reports.noData': 'ဒေတာ မရှိပါ',
   'reports.noRevenue': 'ဝင်ငွေ မရှိပါ',
+
+  // User Manual
+  'manual.title': '📖 အသုံးပြုသူလမ်းညွှန်',
+  'manual.overview': 'အကျဉ်းချုပ်',
+  'manual.login': 'ဝင်ရောက်ခြင်း',
+  'manual.dashboard': 'ဒက်ရှ်ဘုတ်',
+  'manual.cashier': 'ကောင်တာ/POS',
+  'manual.kitchen': 'မီးဖိုချောင်',
+  'manual.orders': 'အော်ဒါ စီမံခြင်း',
+  'manual.ordersByDate': 'ရက်စွဲဖြင့် အော်ဒါ',
+  'manual.stock': 'စတော့ စီမံခြင်း',
+  'manual.recipes': 'ဟင်းပွဲများ',
+  'manual.customers': 'ဖောက်သည်',
+  'manual.staff': 'ဝန်ထမ်း',
+  'manual.reports': 'အစီရင်ခံ',
+  'manual.users': 'အကောင့်',
+  'manual.admin': 'စီမံမှု',
 
   'settings.title': '⚙️ ဆက်တင်',
   'settings.language': 'ဘာသာစကား',

@@ -21,9 +21,10 @@ function enrichOrders(orders: (Order & { items?: OrderItem[] })[], now: number):
 }
 
 const KitchenPage = () => {
-  const { orders, loading, error, fetchOrders, updateOrderItemStatus } = useOrderStore();
+  const { orders, loading, error, fetchOrders, updateOrderItemStatus, removeOrderItem } = useOrderStore();
   const { kitchenCount, newItemIds } = useNotificationStore();
   const [now, setNow] = useState(Date.now());
+  const [removingItemId, setRemovingItemId] = useState<number | null>(null);
 
   // Update timestamp every 30s so "time ago" stays fresh
   useEffect(() => {
@@ -93,6 +94,20 @@ const KitchenPage = () => {
   const pendingGroups = groupByOrder(pendingItems);
   const preparingGroups = groupByOrder(preparingItems);
   const readyGroups = groupByOrder(readyItems);
+
+  // Handle removing an item from the order
+  const handleRemoveItem = async (itemId: number, orderId: number, itemName: string) => {
+    if (!confirm(`Remove "${itemName}" from this order?`)) return;
+
+    setRemovingItemId(itemId);
+    try {
+      await removeOrderItem(itemId, orderId);
+    } catch (err) {
+      console.error('Failed to remove item:', err);
+    } finally {
+      setRemovingItemId(null);
+    }
+  };
 
   return (
     <div className="h-screen bg-[#1e2128] p-4 overflow-y-auto">
@@ -167,6 +182,18 @@ const KitchenPage = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-yellow-400 bg-yellow-500/20 px-2 py-1 rounded">x{item.quantity}</span>
+                          <button
+                            onClick={() => handleRemoveItem(item.id!, item.orderId, item.product_name)}
+                            disabled={removingItemId === item.id}
+                            className={`text-xs px-3 py-1 rounded font-bold transition ${
+                              removingItemId === item.id
+                                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                : 'bg-red-500 hover:bg-red-400 text-white'
+                            }`}
+                            title="Remove item from order"
+                          >
+                            {removingItemId === item.id ? '⏳' : '✕ Remove'}
+                          </button>
                           <button
                             onClick={() => updateOrderItemStatus(item.id!, 'preparing')}
                             className="bg-blue-500 hover:bg-blue-400 text-white text-xs px-3 py-1 rounded font-bold transition"

@@ -562,6 +562,53 @@ Each role sees only the menu items they have access to in the sidebar. Attemptin
 - Fixed ReceiptSlip overlay layout: receipt slip now stacks vertically with action buttons below
 - Container uses `max-w-sm` for centered narrow layout with `overflow-y-auto` for scroll on small screens
 
+#### 21. Reports Page Enhancements
+- **Top Items Limited to 5** — Pie chart and revenue list now show top 5 items instead of 8
+- **Profit & Loss Table** — Shows total revenue, total cost, net profit/loss, and margin percentage
+- **Profit/Loss moved above Inventory Summary** — Better logical flow of financial data
+- **Visual Profit Margin Bar** — Progress bar showing profit margin (green for profit, red for loss)
+- **Summary Cards** — Net profit/loss card + average order profit card
+- **Period-based Updates** — All profit/loss metrics update when switching Today/Week/Month
+
+#### 22. Order Details Table with Pagination
+- **Clickable Order Rows** — Click any order to expand and view detailed breakdown
+- **Per-Order Profit/Loss** — Each row shows revenue, cost, profit/loss, and margin
+- **Completed/Cancelled Tabs** — Toggle between completed and cancelled orders
+- **Pagination (10 rows/page)** — Prev/Next buttons + numbered page buttons
+- **Auto Page Reset** — Resets to page 1 when changing tabs or periods
+- **Expanded Order Panel** — Shows order items with individual profit calculations
+- **Order Summary Cards** — Revenue, cost, profit/loss, and margin for selected order
+
+#### 23. Dashboard — Order Types & Payment Methods
+- **Moved from Reports to Dashboard** — Better placement for quick overview
+- **Order Types Card** — Shows Dine-in 🍽️, Takeout 🥡, Delivery 🚚 with counts and revenue
+- **Payment Methods Card** — Shows Card 💳, QR 📱, Cash 💵 with counts, revenue, and percentages
+
+#### 24. Stock Page — Add Product Dialog UX Overhaul
+- **Multi-Step Wizard (3 Steps)** — Basic Info → Pricing → Stock Setup
+- **Progress Bar** — Visual indicator showing current step
+- **Step 1: Basic Info** — Large emoji picker, visual category cards with emojis, live preview
+- **Step 2: Pricing** — Color-coded price cards (green for selling, red for cost), live profit/margin preview
+- **Step 3: Stock Setup** — Unit configuration, initial stock, reorder point, product summary preview
+- **Better Navigation** — Back/Next buttons with validation before advancing
+- **Larger Modal** — `max-w-2xl` with rounded corners, shadow, sticky header
+- **Helper Text** — Contextual hints and live conversion previews
+
+#### 25. Stock Page — Product Table Pagination & Reverse Order
+- **Pagination (10 rows/page)** — Prev/Next buttons + numbered page buttons
+- **Reverse Order** — Newest products appear first (last added = first shown)
+- **Auto Page Reset** — Resets to page 1 when changing stock filters, category tabs, or search
+- **No useEffect** — Page reset handled in click handlers to avoid lint errors
+
+#### 26. Order Item Removal Logic
+- **New Function: `removeOrderItem(orderItemId, orderId)`** — Deletes item, recalculates order totals
+- **Kitchen Page** — Added "✕ Remove" button for pending items only
+- **Orders Page** — Added "✕" button for pending items in expanded order view
+- **Confirmation Dialog** — Prevents accidental deletions
+- **Auto-Cancel Order** — If all items are removed, order status changes to "cancelled"
+- **Real-time Updates** — Changes reflect instantly across Kitchen and Orders pages
+- **Loading States** — Disabled buttons with loading indicator during removal
+
 ---
 
 ## Build & Lint

@@ -6,7 +6,7 @@ import ReceiptSlip, { type ReceiptData } from './ReceiptSlip';
 type OrderView = 'active' | 'today' | 'history';
 
 const OrdersPage = () => {
-  const { orders, loading, error, fetchOrders, updateOrder } = useOrderStore();
+  const { orders, loading, error, fetchOrders, updateOrder, removeOrderItem } = useOrderStore();
   const { ordersCount } = useNotificationStore();
 
   const [view, setView] = useState<OrderView>('active');
@@ -18,6 +18,7 @@ const OrdersPage = () => {
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [removingItemId, setRemovingItemId] = useState<number | null>(null);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders, ordersCount]);
 
@@ -114,6 +115,19 @@ const OrdersPage = () => {
     setSelectedPaymentMethod('');
     setReceiptData(receipt);
     setShowReceipt(true);
+  };
+
+  const handleRemoveItem = async (itemId: number, orderId: number, itemName: string) => {
+    if (!confirm(`Remove "${itemName}" from this order?`)) return;
+
+    setRemovingItemId(itemId);
+    try {
+      await removeOrderItem(itemId, orderId);
+    } catch (err) {
+      console.error('Failed to remove item:', err);
+    } finally {
+      setRemovingItemId(null);
+    }
   };
 
   const statusConfig: Record<string, { label: string; bg: string; text: string; border: string }> = {
@@ -364,6 +378,7 @@ const OrdersPage = () => {
                                           served: { label: '🍽', bg: 'bg-gray-500/20', text: 'text-gray-400' },
                                         };
                                         const itemStatus = item.status ? itemStatusConfig[item.status] : itemStatusConfig.pending;
+                                        const canRemove = item.status === 'pending';
                                         return (
                                           <div key={item.id || i} className="flex items-center justify-between bg-[#272a30] rounded-lg px-3 py-2">
                                             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -372,6 +387,20 @@ const OrdersPage = () => {
                                               {item.notes && <span className="text-purple-400 text-[10px] bg-purple-500/20 px-1.5 py-0.5 rounded shrink-0">{item.notes}</span>}
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">
+                                              {canRemove && (
+                                                <button
+                                                  onClick={() => handleRemoveItem(item.id!, order.id!, item.product_name)}
+                                                  disabled={removingItemId === item.id}
+                                                  className={`text-xs px-2 py-1 rounded font-semibold transition ${
+                                                    removingItemId === item.id
+                                                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                                      : 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30'
+                                                  }`}
+                                                  title="Remove item from order"
+                                                >
+                                                  {removingItemId === item.id ? '⏳' : '✕'}
+                                                </button>
+                                              )}
                                               <span className={`${itemStatus.text} text-xs`} title={item.status}>{itemStatus.label}</span>
                                               <span className="text-green-400 text-sm font-semibold ml-2">${item.subtotal.toFixed(2)}</span>
                                             </div>

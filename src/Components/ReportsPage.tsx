@@ -25,6 +25,8 @@ const ReportsPage = () => {
   const { customers, fetchCustomers } = useCustomerStore();
   const { t } = useI18nStore();
   const [period, setPeriod] = useState<'today' | 'week' | 'month'>('week');
+  const [selectedOrder, setSelectedOrder] = useState<number | null>(null);
+  const [orderTab, setOrderTab] = useState<'completed' | 'cancelled'>('completed');
 
   useEffect(() => {
     fetchOrders();
@@ -78,7 +80,7 @@ const ReportsPage = () => {
     return data;
   }, [orders]);
 
-  // Top Selling Items (by quantity sold)
+  // Top Selling Items (by quantity sold) - Limited to 5
   const topItems = useMemo(() => {
     const itemMap: Record<string, { name: string; qty: number; revenue: number }> = {};
 
@@ -94,7 +96,7 @@ const ReportsPage = () => {
 
     return Object.values(itemMap)
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 8)
+      .slice(0, 5)
       .map(item => ({
         name: item.name.length > 12 ? item.name.slice(0, 10) + '...' : item.name,
         fullName: item.name,
@@ -113,36 +115,103 @@ const ReportsPage = () => {
     }));
   }, [topItems]);
 
-  // Order type breakdown
-  const orderTypeBreakdown = useMemo(() => {
-    const counts: Record<string, { count: number; revenue: number }> = { 'dine-in': { count: 0, revenue: 0 }, takeout: { count: 0, revenue: 0 }, delivery: { count: 0, revenue: 0 } };
-    filteredOrders.forEach(o => {
-      if (!counts[o.order_type]) counts[o.order_type] = { count: 0, revenue: 0 };
-      counts[o.order_type].count++;
-      counts[o.order_type].revenue += o.total || 0;
-    });
-    return counts;
-  }, [filteredOrders]);
-
-  // Payment method breakdown
-  const paymentBreakdown = useMemo(() => {
-    const counts: Record<string, { count: number; revenue: number }> = {};
-    completedOrders.forEach(o => {
-      const method = o.payment_method || 'cash';
-      const label = method === 'card' ? '💳 Card' : method === 'qr' ? '📱 QR' : '💵 Cash';
-      if (!counts[label]) counts[label] = { count: 0, revenue: 0 };
-      counts[label].count++;
-      counts[label].revenue += o.total || 0;
-    });
-    return Object.entries(counts);
-  }, [completedOrders]);
-
   // Low stock value
   const lowStockValue = products.filter(p => p.stock_quantity <= p.reorder_point).length;
   const inventoryValue = products.reduce((s, p) => s + (p.stock_quantity * (p.cost_price || p.price)), 0);
 
+  // Profit/Loss Calculation
+  const profitLoss = useMemo(() => {
+    const totalRevenue = filteredOrders.filter(o => o.status === 'completed').reduce((s, o) => s + (o.total || 0), 0);
+    
+    // Calculate total cost from order items
+    let totalCost = 0;
+    filteredOrders.filter(o => o.status === 'completed').forEach(o => {
+      o.items?.forEach(item => {
+        // Find the product to get cost price
+        const product = products.find(p => p.id === item.product_id);
+        const costPrice = product?.cost_price || 0;
+        totalCost += costPrice * item.quantity;
+      });
+    });
+
+    const profit = totalRevenue - totalCost;
+    const profitMargin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+
+    return {
+      revenue: totalRevenue,
+      cost: totalCost,
+      profit,
+      margin: profitMargin,
+    };
+  }, [filteredOrders, products]);
+
+  // Orders by status for the table
+  const completedOrdersList = useMemo(() => {
+    return filteredOrders.filter(o => o.status === 'completed');
+  }, [filteredOrders]);
+
+  const cancelledOrdersList = useMemo(() => {
+    return filteredOrders.filter(o => o.status === 'cancelled');
+  }, [filteredOrders]);
+
+  // Calculate profit/loss for each order
+  const getOrderProfit = (order: typeof orders[0]) => {
+    const revenue = order.total || 0;
+    let cost = 0;
+
+    order.items?.forEach(item => {
+      const product = products.find(p => p.id === item.product_id);
+      const costPrice = product?.cost_price || 0;
+      cost += costPrice * item.quantity;
+    });
+
+    return {
+      revenue,
+      cost,
+      profit: revenue - cost,
+      margin: revenue > 0 ? ((revenue - cost) / revenue) * 100 : 0,
+    };
+  };
+
+  // Selected order details
+  const selectedOrderData = useMemo(() => {
+    if (!selectedOrder) return null;
+    const order = orders.find(o => o.id === selectedOrder);
+    if (!order) return null;
+
+    const revenue = order.total || 0;
+    let cost = 0;
+    order.items?.forEach(item => {
+      const product = products.find(p => p.id === item.product_id);
+      const costPrice = product?.cost_price || 0;
+      cost += costPrice * item.quantity;
+    });
+
+    return {
+      order,
+      profit: {
+        revenue,
+        cost,
+        profit: revenue - cost,
+        margin: revenue > 0 ? ((revenue - cost) / revenue) * 100 : 0,
+      },
+    };
+  }, [selectedOrder, orders, products]);
+
   const periodLabels = { today: t('reports.today'), week: t('reports.thisWeek'), month: t('reports.thisMonth') };
   const periodKeys: ('today' | 'week' | 'month')[] = ['today', 'week', 'month'];
+
+  // Pagination for order details table
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10;
+  const currentOrdersList = orderTab === 'completed' ? completedOrdersList : cancelledOrdersList;
+  const totalPages = Math.ceil(currentOrdersList.length / rowsPerPage);
+  const paginatedOrders = currentOrdersList.slice(
+    (currentPage - 1) * rowsPerPage,
+    currentPage * rowsPerPage
+  );
+
+  // Reset page when tab or period changes (handled in onClick)
 
   return (
     <div className="p-6 bg-[#1e2128] min-h-full overflow-y-auto">
@@ -268,53 +337,89 @@ const ReportsPage = () => {
         </div>
       </div>
 
-      {/* Order Types + Payment Methods */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Order Types */}
-        <div className="bg-[#272a30] rounded-xl border border-gray-700 p-5">
-          <h2 className="text-xl font-bold text-white mb-4">Order Types</h2>
-          <div className="space-y-3">
-            {Object.entries(orderTypeBreakdown).map(([type, data]) => (
-              <div key={type} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{type === 'dine-in' ? '🍽️' : type === 'takeout' ? '🥡' : '🚚'}</span>
-                  <div>
-                    <p className="text-white font-semibold capitalize">{type}</p>
-                    <p className="text-gray-500 text-sm">{data.count} orders</p>
-                  </div>
-                </div>
-                <span className="text-green-400 font-bold">${data.revenue.toFixed(2)}</span>
+      {/* Profit & Loss Table */}
+      <div className="bg-[#272a30] rounded-xl border border-gray-700 p-5 mb-6">
+        <h2 className="text-xl font-bold text-white mb-4">💰 Profit & Loss</h2>
+        <p className="text-gray-500 text-sm mb-4">{periodLabels[period]} overview</p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-700">
+                <th className="text-left py-3 px-4 text-gray-400 font-semibold">Metric</th>
+                <th className="text-right py-3 px-4 text-gray-400 font-semibold">Amount</th>
+                <th className="text-right py-3 px-4 text-gray-400 font-semibold">%</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              <tr className="hover:bg-gray-700/30 transition">
+                <td className="py-3 px-4 text-white font-semibold">💵 Total Revenue</td>
+                <td className="py-3 px-4 text-right text-green-400 font-bold text-lg">${profitLoss.revenue.toFixed(2)}</td>
+                <td className="py-3 px-4 text-right text-green-400 font-semibold">100%</td>
+              </tr>
+              <tr className="hover:bg-gray-700/30 transition">
+                <td className="py-3 px-4 text-white font-semibold">📦 Total Cost</td>
+                <td className="py-3 px-4 text-right text-red-400 font-bold text-lg">${profitLoss.cost.toFixed(2)}</td>
+                <td className="py-3 px-4 text-right text-red-400 font-semibold">
+                  {profitLoss.revenue > 0 ? ((profitLoss.cost / profitLoss.revenue) * 100).toFixed(1) : 0}%
+                </td>
+              </tr>
+              <tr className="hover:bg-gray-700/30 transition bg-gray-800/50">
+                <td className="py-3 px-4 text-white font-bold text-lg">
+                  {profitLoss.profit >= 0 ? '✅ Profit' : '❌ Loss'}
+                </td>
+                <td className={`py-3 px-4 text-right font-bold text-xl ${profitLoss.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  ${Math.abs(profitLoss.profit).toFixed(2)}
+                </td>
+                <td className={`py-3 px-4 text-right font-bold text-lg ${profitLoss.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {profitLoss.margin.toFixed(1)}%
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Visual Bar */}
+        <div className="mt-6 pt-4 border-t border-gray-700">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-400">Profit Margin</span>
+                <span className={`font-bold ${profitLoss.margin >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {profitLoss.margin.toFixed(1)}%
+                </span>
               </div>
-            ))}
+              <div className="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${profitLoss.margin >= 0 ? 'bg-linear-to-r from-green-500 to-green-400' : 'bg-linear-to-r from-red-500 to-red-400'}`}
+                  style={{ width: `${Math.min(Math.abs(profitLoss.margin), 100)}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Payment Methods */}
-        <div className="bg-[#272a30] rounded-xl border border-gray-700 p-5">
-          <h2 className="text-xl font-bold text-white mb-4">Payment Methods</h2>
-          {paymentBreakdown.length === 0 ? (
-            <div className="text-center text-gray-400 py-8">No completed orders</div>
-          ) : (
-            <div className="space-y-3">
-              {paymentBreakdown.map(([method, data]) => (
-                <div key={method} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{method.includes('Card') ? '💳' : method.includes('QR') ? '📱' : '💵'}</span>
-                    <span className="text-white font-semibold">{method}</span>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-green-400 font-bold">{data.count} · ${data.revenue.toFixed(2)}</p>
-                    <p className="text-gray-500 text-sm">{completedOrders.length ? Math.round((data.count / completedOrders.length) * 100) : 0}%</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Summary Cards */}
+        <div className="mt-4 grid grid-cols-2 gap-4">
+          <div className={`rounded-lg p-4 border ${profitLoss.profit >= 0 ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+            <p className={`text-sm font-semibold ${profitLoss.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {profitLoss.profit >= 0 ? '📈 Net Profit' : '📉 Net Loss'}
+            </p>
+            <p className={`text-2xl font-bold mt-1 ${profitLoss.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              ${Math.abs(profitLoss.profit).toFixed(2)}
+            </p>
+          </div>
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <p className="text-blue-400 text-sm font-semibold">📊 Avg Order Profit</p>
+            <p className="text-2xl font-bold text-blue-400 mt-1">
+              ${completedOrders.length > 0 ? (profitLoss.revenue / completedOrders.length).toFixed(2) : '0.00'}
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Inventory Summary */}
-      <div className="bg-[#272a30] rounded-xl border border-gray-700 p-5">
+      <div className="bg-[#272a30] rounded-xl border border-gray-700 p-5 mb-6">
         <h2 className="text-xl font-bold text-white mb-4">Inventory Summary</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
@@ -334,6 +439,237 @@ const ReportsPage = () => {
             <p className="text-2xl font-bold text-blue-400">{customers.length}</p>
           </div>
         </div>
+      </div>
+
+      {/* Orders Detail Section */}
+      <div className="bg-[#272a30] rounded-xl border border-gray-700 p-5 mt-6">
+        <h2 className="text-xl font-bold text-white mb-4">📋 Order Details</h2>
+        
+        {/* Tabs */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => { setOrderTab('completed'); setSelectedOrder(null); setCurrentPage(1); }}
+            className={`px-4 py-2 rounded-lg font-semibold transition ${
+              orderTab === 'completed'
+                ? 'bg-green-500 text-black'
+                : 'bg-gray-700 text-gray-400 hover:text-white'
+            }`}
+          >
+            ✅ Completed ({completedOrdersList.length})
+          </button>
+          <button
+            onClick={() => { setOrderTab('cancelled'); setSelectedOrder(null); setCurrentPage(1); }}
+            className={`px-4 py-2 rounded-lg font-semibold transition ${
+              orderTab === 'cancelled'
+                ? 'bg-red-500 text-black'
+                : 'bg-gray-700 text-gray-400 hover:text-white'
+            }`}
+          >
+            ❌ Cancelled ({cancelledOrdersList.length})
+          </button>
+        </div>
+
+        {/* Orders Table */}
+        {((orderTab === 'completed' && completedOrdersList.length === 0) ||
+          (orderTab === 'cancelled' && cancelledOrdersList.length === 0)) ? (
+          <div className="text-center text-gray-400 py-8">
+            No {orderTab} orders for this period
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-700">
+                    <th className="text-left py-3 px-4 text-gray-400 font-semibold">Order #</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-semibold">Customer</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-semibold">Type</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-semibold">Items</th>
+                    <th className="text-right py-3 px-4 text-gray-400 font-semibold">Revenue</th>
+                    <th className="text-right py-3 px-4 text-gray-400 font-semibold">Cost</th>
+                    <th className="text-right py-3 px-4 text-gray-400 font-semibold">Profit/Loss</th>
+                    <th className="text-right py-3 px-4 text-gray-400 font-semibold">Margin</th>
+                    <th className="text-center py-3 px-4 text-gray-400 font-semibold">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {paginatedOrders.map(order => {
+                    const profit = getOrderProfit(order);
+                    const orderId = order.id ?? 0;
+                    return (
+                      <tr
+                        key={order.id}
+                        className={`hover:bg-gray-700/30 transition cursor-pointer ${
+                          selectedOrder === orderId ? 'bg-yellow-500/10 border-l-2 border-yellow-500' : ''
+                        }`}
+                        onClick={() => setSelectedOrder(selectedOrder === orderId ? null : orderId)}
+                      >
+                        <td className="py-3 px-4 text-yellow-400 font-semibold">{order.order_number}</td>
+                        <td className="py-3 px-4 text-white">{order.customer_name || '-'}</td>
+                        <td className="py-3 px-4 text-gray-300 capitalize">
+                          {order.order_type === 'dine-in' ? '🍽️ Dine-in' : order.order_type === 'takeout' ? '🥡 Takeout' : '🚚 Delivery'}
+                          {order.table_number && ` (T${order.table_number})`}
+                        </td>
+                        <td className="py-3 px-4 text-white text-center">{order.items?.length || 0}</td>
+                        <td className="py-3 px-4 text-right text-green-400 font-semibold">${profit.revenue.toFixed(2)}</td>
+                        <td className="py-3 px-4 text-right text-red-400 font-semibold">${profit.cost.toFixed(2)}</td>
+                        <td className={`py-3 px-4 text-right font-bold ${profit.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {profit.profit >= 0 ? '+' : ''}${profit.profit.toFixed(2)}
+                        </td>
+                        <td className={`py-3 px-4 text-right font-semibold ${profit.margin >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {profit.margin.toFixed(1)}%
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <button className="text-blue-400 hover:text-blue-300 text-sm font-semibold">
+                            {selectedOrder === orderId ? '▼ Hide' : '▶ View'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
+                <p className="text-gray-400 text-sm">
+                  Showing {(currentPage - 1) * rowsPerPage + 1}–{Math.min(currentPage * rowsPerPage, currentOrdersList.length)} of {currentOrdersList.length} orders
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1.5 rounded-md font-semibold text-sm transition ${
+                      currentPage === 1
+                        ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+                    }`}
+                  >
+                    ← Prev
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-9 h-9 rounded-md font-semibold text-sm transition ${
+                        currentPage === page
+                          ? 'bg-yellow-500 text-black'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className={`px-3 py-1.5 rounded-md font-semibold text-sm transition ${
+                      currentPage === totalPages
+                        ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
+                    }`}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Selected Order Details */}
+        {selectedOrderData && (
+          <div className="mt-6 bg-gray-800/50 rounded-lg border border-gray-600 p-5">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">
+                  Order: {selectedOrderData.order.order_number}
+                </h3>
+                <p className="text-gray-400 text-sm">
+                  {selectedOrderData.order.customer_name || 'Walk-in Customer'} • 
+                  {selectedOrderData.order.order_type === 'dine-in' ? ' 🍽️ Dine-in' : selectedOrderData.order.order_type === 'takeout' ? ' 🥡 Takeout' : ' 🚚 Delivery'}
+                  {selectedOrderData.order.table_number && ` Table ${selectedOrderData.order.table_number}`}
+                  {selectedOrderData.order.created_at && ` • ${new Date(selectedOrderData.order.created_at).toLocaleString()}`}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="text-gray-400 hover:text-white text-xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Order Items Table */}
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold text-gray-400 mb-2">Order Items</h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="text-left py-2 px-3 text-gray-400">Product</th>
+                      <th className="text-right py-2 px-3 text-gray-400">Qty</th>
+                      <th className="text-right py-2 px-3 text-gray-400">Price</th>
+                      <th className="text-right py-2 px-3 text-gray-400">Cost</th>
+                      <th className="text-right py-2 px-3 text-gray-400">Revenue</th>
+                      <th className="text-right py-2 px-3 text-gray-400">Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700/50">
+                    {selectedOrderData.order.items?.map((item, idx) => {
+                      const product = products.find(p => p.id === item.product_id);
+                      const costPrice = product?.cost_price || 0;
+                      const itemRevenue = item.subtotal || 0;
+                      const itemCost = costPrice * item.quantity;
+                      const itemProfit = itemRevenue - itemCost;
+
+                      return (
+                        <tr key={idx} className="hover:bg-gray-700/20">
+                          <td className="py-2 px-3 text-white">{item.product_name}</td>
+                          <td className="py-2 px-3 text-right text-gray-300">{item.quantity}</td>
+                          <td className="py-2 px-3 text-right text-gray-300">${item.unit_price.toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right text-red-400">${itemCost.toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right text-green-400">${itemRevenue.toFixed(2)}</td>
+                          <td className={`py-2 px-3 text-right font-semibold ${itemProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {itemProfit >= 0 ? '+' : ''}${itemProfit.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Order Summary */}
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-700">
+              <div>
+                <p className="text-gray-400 text-sm">Total Revenue</p>
+                <p className="text-2xl font-bold text-green-400">${selectedOrderData.profit.revenue.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">Total Cost</p>
+                <p className="text-2xl font-bold text-red-400">${selectedOrderData.profit.cost.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">
+                  {selectedOrderData.profit.profit >= 0 ? '✅ Profit' : '❌ Loss'}
+                </p>
+                <p className={`text-2xl font-bold ${selectedOrderData.profit.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  ${Math.abs(selectedOrderData.profit.profit).toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">Profit Margin</p>
+                <p className={`text-2xl font-bold ${selectedOrderData.profit.margin >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {selectedOrderData.profit.margin.toFixed(1)}%
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

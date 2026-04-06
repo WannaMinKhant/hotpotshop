@@ -14,6 +14,7 @@ interface ProductState {
   addProduct: (newProduct: Omit<Product, "id">) => Promise<void>;
   updateProduct: (id: number, updates: Partial<Product>) => Promise<void>;
   deleteProduct: (id: number) => Promise<void>;
+  checkProductUsage: (id: number) => Promise<{ orders: number; recipes: number; stockMovements: number }>;
   updateStock: (id: number, newStock: number) => Promise<void>;
   updateReorderPoint: (id: number, newPoint: number) => Promise<void>;
   setSearch: (term: string) => void;
@@ -31,6 +32,7 @@ export const useProductStore = create<ProductState>((set) => ({
       const { data, error } = await supabase
         .from("products")
         .select("*")
+        .eq("is_active", true)
         .order("category", { ascending: true });
       if (error) throw error;
       set({ products: data || [] });
@@ -92,15 +94,54 @@ export const useProductStore = create<ProductState>((set) => ({
   deleteProduct: async (id) => {
     set({ loading: true, error: null });
     try {
-      const { error } = await supabase.from("products").delete().eq("id", id);
+      // Soft delete: set is_active = false instead of hard delete
+      const { error } = await supabase
+        .from("products")
+        .update({ is_active: false })
+        .eq("id", id);
       if (error) throw error;
-      set((state) => ({ products: state.products.filter((p) => p.id !== id) }));
+      set((state) => ({
+        products: state.products.map((p) =>
+          p.id === id ? { ...p, is_active: false } : p,
+        ),
+      }));
     } catch (e: unknown) {
       set({
         error: e instanceof Error ? e.message : "Failed to delete product",
       });
     } finally {
       set({ loading: false });
+    }
+  },
+
+  checkProductUsage: async (id) => {
+    try {
+      // Count orders using this product
+      const { count: orderCount } = await supabase
+        .from("order_items")
+        .select("*", { count: "exact", head: true })
+        .eq("product_id", id);
+
+      // Count recipes using this product as ingredient
+      const { count: recipeCount } = await supabase
+        .from("recipe_ingredients")
+        .select("*", { count: "exact", head: true })
+        .eq("product_id", id);
+
+      // Count stock movements
+      const { count: movementCount } = await supabase
+        .from("stock_movements")
+        .select("*", { count: "exact", head: true })
+        .eq("product_id", id);
+
+      return {
+        orders: orderCount || 0,
+        recipes: recipeCount || 0,
+        stockMovements: movementCount || 0,
+      };
+    } catch (e: unknown) {
+      console.error("Failed to check product usage:", e);
+      return { orders: 0, recipes: 0, stockMovements: 0 };
     }
   },
 

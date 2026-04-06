@@ -14,6 +14,7 @@ interface OrderState {
   addOrder: (newOrder: Omit<Order, 'id' | 'order_number'>, items: Omit<OrderItem, 'id' | 'order_id'>[]) => Promise<string>;
   addItemsToOrder: (orderId: number, items: Omit<OrderItem, 'id' | 'order_id'>[]) => Promise<boolean>;
   updateOrderItemStatus: (orderItemId: number, status: 'pending' | 'preparing' | 'ready' | 'served') => Promise<void>;
+  removeOrderItem: (orderItemId: number, orderId: number) => Promise<void>;
   updateOrder: (id: number, updates: Partial<Order>) => Promise<void>;
   deleteOrder: (id: number) => Promise<void>;
 }
@@ -304,6 +305,94 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       await get().fetchOrders();
     } catch (e: unknown) {
       set({ error: e instanceof Error ? e.message : 'Failed to update item status' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  removeOrderItem: async (orderItemId, orderId) => {
+    set({ loading: true, error: null });
+    try {
+      // Get the item details before deletion
+      const { data: itemData } = await supabase
+        .from('order_items')
+        .select('product_id, quantity, product_name, subtotal')
+        .eq('id', orderItemId)
+        .single();
+
+      if (!itemData) throw new Error('Item not found');
+
+      // Delete the order item
+      const { error } = await supabase
+        .from('order_items')
+        .delete()
+        .eq('id', orderItemId);
+      if (error) throw error;
+
+      // Return stock back to product (reverse the deduction)
+      if (itemData.product_id <= 100000) {
+        // Regular product — add stock back
+        const { data: product } = await supabase
+          .from('products')
+          .select('stock_quantity')
+          .eq('id', itemData.product_id)
+          .single();
+        
+        if (product) {
+          await supabase
+            .from('products')
+            .update({ 
+              stock_quantity: product.stock_quantity + itemData.quantity 
+            })
+            .eq('id', itemData.product_id);
+
+          // Record a return movement to track this stock addition
+          await supabase
+            .from('stock_movements')
+            .insert([{
+              product_id: itemData.product_id,
+              movement_type: 'return',
+              quantity: itemData.quantity,
+              unit: 'pcs',
+              reference: `Item removed from order`,
+              notes: `Item "${itemData.product_name}" removed, stock returned`,
+            }]);
+        }
+      }
+
+      // Recalculate order totals
+      const { data: allItems } = await supabase
+        .from('order_items')
+        .select('subtotal')
+        .eq('order_id', orderId);
+
+      const newTotal = allItems?.reduce((sum: number, i: { subtotal: number }) => sum + i.subtotal, 0) || 0;
+      const newSubtotal = newTotal / 1.1;
+      const newTax = newTotal - newSubtotal;
+
+      // Update order totals
+      await supabase
+        .from('orders')
+        .update({
+          subtotal: newSubtotal,
+          tax_amount: newTax,
+          total: newTotal,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId);
+
+      // If order has no more items and was in kitchen workflow, consider cancelling it
+      if (allItems?.length === 0) {
+        await supabase
+          .from('orders')
+          .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+          .eq('id', orderId);
+      }
+
+      // Refresh orders to reflect the changes
+      await get().fetchOrders();
+    } catch (e: unknown) {
+      set({ error: e instanceof Error ? e.message : 'Failed to remove order item' });
     } finally {
       set({ loading: false });
     }

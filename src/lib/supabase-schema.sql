@@ -53,6 +53,7 @@ CREATE TABLE products (
   price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
   cost_price NUMERIC(10, 2) DEFAULT 0.00,
   emoji TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -177,6 +178,13 @@ CREATE TABLE user_profiles (
 -- ============================================
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'preparing', 'ready', 'served'));
 CREATE INDEX IF NOT EXISTS idx_order_items_status ON order_items(status);
+
+-- ============================================
+-- MIGRATION: Add is_active flag to products table
+-- This enables soft delete instead of hard delete
+-- ============================================
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+CREATE INDEX IF NOT EXISTS idx_products_is_active ON products(is_active);
 
 -- ============================================
 -- STEP 3: CREATE INDEXES

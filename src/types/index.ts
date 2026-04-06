@@ -22,6 +22,7 @@ export interface Product {
   price: number;
   cost_price?: number;
   emoji?: string;
+  is_active?: boolean;
   created_at?: string;
 }
 

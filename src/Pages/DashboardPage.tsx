@@ -5,6 +5,7 @@ import DashboardHome from '../Components/DashboardHome';
 import CashierPage from '../Components/CashierPage';
 import KitchenPage from '../Components/KitchenPage';
 import OrdersPage from '../Components/OrdersPage';
+import OrdersByDatePage from '../Components/OrdersByDatePage';
 import StockControlPage from '../Components/StockControlPage';
 import RecipesPage from '../Components/RecipesPage';
 import CustomersPage from '../Components/CustomersPage';
@@ -12,6 +13,7 @@ import StaffPage from '../Components/StaffPage';
 import ReportsPage from '../Components/ReportsPage';
 import UsersPage from '../Components/UsersPage';
 import AdminPage from '../Components/AdminPage';
+import UserManualPage from '../Components/UserManualPage';
 
 const renderModule = (activeModule: string) => {
   switch (activeModule) {
@@ -23,6 +25,8 @@ const renderModule = (activeModule: string) => {
       return <KitchenPage />;
     case 'orders':
       return <OrdersPage />;
+    case 'orders-by-date':
+      return <OrdersByDatePage />;
     case 'stock':
       return <StockControlPage />;
     case 'recipes':
@@ -37,6 +41,8 @@ const renderModule = (activeModule: string) => {
       return <UsersPage />;
     case 'admin':
       return <AdminPage />;
+    case 'user-manual':
+      return <UserManualPage />;
     default:
       return <DashboardHome />;
   }

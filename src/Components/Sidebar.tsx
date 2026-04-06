@@ -4,7 +4,7 @@ import { useI18nStore } from '../stores/i18nStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { rolePermissions } from '../lib/roles';
 
-type ModuleName = 'dashboard' | 'cashier' | 'kitchen' | 'orders' | 'stock' | 'recipes' | 'customers' | 'staff' | 'reports' | 'users' | 'admin';
+type ModuleName = 'dashboard' | 'cashier' | 'kitchen' | 'orders' | 'orders-by-date' | 'stock' | 'recipes' | 'customers' | 'staff' | 'reports' | 'users' | 'admin' | 'user-manual';
 
 interface SidebarProps {
   activeModule: string;
@@ -16,6 +16,7 @@ const allMenuItems: { id: ModuleName; label: string; icon: string }[] = [
   { id: 'cashier', label: 'sidebar.cashier', icon: '💰' },
   { id: 'kitchen', label: 'sidebar.kitchen', icon: '🍲' },
   { id: 'orders', label: 'sidebar.orders', icon: '📋' },
+  { id: 'orders-by-date', label: 'Orders by Date', icon: '📅' },
   { id: 'stock', label: 'sidebar.stock', icon: '📦' },
   { id: 'recipes', label: 'sidebar.recipes', icon: '📖' },
   { id: 'customers', label: 'sidebar.customers', icon: '👥' },
@@ -23,6 +24,7 @@ const allMenuItems: { id: ModuleName; label: string; icon: string }[] = [
   { id: 'reports', label: 'sidebar.reports', icon: '📈' },
   { id: 'users', label: 'sidebar.users', icon: '🔑' },
   { id: 'admin', label: 'sidebar.admin', icon: '⚙️' },
+  { id: 'user-manual', label: 'User Manual', icon: '📚' },
 ];
 
 const Sidebar = ({ activeModule, onModuleChange }: SidebarProps) => {

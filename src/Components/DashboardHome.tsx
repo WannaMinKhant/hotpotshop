@@ -288,6 +288,89 @@ const DashboardHome = () => {
         )}
       </div>
 
+      {/* Order Types + Payment Methods */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Order Types */}
+        <div className="bg-[#272a30] rounded-xl border border-gray-700 overflow-hidden">
+          <div className="p-5 border-b border-gray-700">
+            <h2 className="text-xl font-bold text-white">📊 Order Types</h2>
+          </div>
+          <div className="p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🍽️</span>
+                <div>
+                  <p className="text-white font-semibold">Dine-in</p>
+                  <p className="text-gray-500 text-sm">{dineInCount} orders</p>
+                </div>
+              </div>
+              <span className="text-green-400 font-bold">
+                ${orders.filter(o => o.order_type === 'dine-in').reduce((s, o) => s + (o.total || 0), 0).toFixed(2)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🥡</span>
+                <div>
+                  <p className="text-white font-semibold">Takeout</p>
+                  <p className="text-gray-500 text-sm">{takeoutCount} orders</p>
+                </div>
+              </div>
+              <span className="text-green-400 font-bold">
+                ${orders.filter(o => o.order_type === 'takeout').reduce((s, o) => s + (o.total || 0), 0).toFixed(2)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🚚</span>
+                <div>
+                  <p className="text-white font-semibold">Delivery</p>
+                  <p className="text-gray-500 text-sm">{deliveryCount} orders</p>
+                </div>
+              </div>
+              <span className="text-green-400 font-bold">
+                ${orders.filter(o => o.order_type === 'delivery').reduce((s, o) => s + (o.total || 0), 0).toFixed(2)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Payment Methods */}
+        <div className="bg-[#272a30] rounded-xl border border-gray-700 overflow-hidden">
+          <div className="p-5 border-b border-gray-700">
+            <h2 className="text-xl font-bold text-white">💳 Payment Methods</h2>
+          </div>
+          {completedOrders.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">No completed orders</div>
+          ) : (
+            <div className="p-5 space-y-3">
+              {(() => {
+                const paymentCounts: Record<string, { count: number; revenue: number }> = {};
+                completedOrders.forEach(o => {
+                  const method = o.payment_method || 'cash';
+                  const label = method === 'card' ? '💳 Card' : method === 'qr' ? '📱 QR' : '💵 Cash';
+                  if (!paymentCounts[label]) paymentCounts[label] = { count: 0, revenue: 0 };
+                  paymentCounts[label].count++;
+                  paymentCounts[label].revenue += o.total || 0;
+                });
+                return Object.entries(paymentCounts).map(([method, data]) => (
+                  <div key={method} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{method.includes('Card') ? '💳' : method.includes('QR') ? '📱' : '💵'}</span>
+                      <span className="text-white font-semibold">{method}</span>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-green-400 font-bold">{data.count} · ${data.revenue.toFixed(2)}</p>
+                      <p className="text-gray-500 text-sm">{Math.round((data.count / completedOrders.length) * 100)}%</p>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Kitchen Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Table Status */}

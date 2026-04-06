@@ -21,12 +21,12 @@ export const roleColors: Record<UserRole, string> = {
 
 // Which sidebar modules each role can access
 export const rolePermissions: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'cashier', 'kitchen', 'orders', 'stock', 'recipes', 'customers', 'staff', 'reports', 'users', 'admin', 'settings'],
-  manager: ['dashboard', 'cashier', 'kitchen', 'orders', 'stock', 'recipes', 'customers', 'staff', 'reports', 'settings'],
-  cashier: ['cashier', 'orders'],
-  chef: ['kitchen'],
-  waiter: ['orders', 'kitchen', 'customers'],
-  cleaner: ['dashboard'],
+  admin: ['dashboard', 'cashier', 'kitchen', 'orders', 'orders-by-date', 'stock', 'recipes', 'customers', 'staff', 'reports', 'users', 'admin', 'user-manual', 'settings'],
+  manager: ['dashboard', 'cashier', 'kitchen', 'orders', 'orders-by-date', 'stock', 'recipes', 'customers', 'staff', 'reports', 'user-manual', 'settings'],
+  cashier: ['cashier', 'orders', 'orders-by-date', 'user-manual'],
+  chef: ['kitchen', 'user-manual'],
+  waiter: ['orders', 'orders-by-date', 'kitchen', 'customers', 'user-manual'],
+  cleaner: ['dashboard', 'user-manual'],
 };
 
 // Default page each role lands on
